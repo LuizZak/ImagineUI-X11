@@ -1,0 +1,51 @@
+{
+  "originHash" : "5b865be137865b03cbf8f4a491e5fef4c5cd965939420722d773b10e3308c586",
+  "pins" : [
+    {
+      "identity" : "cassowaryswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/LuizZak/CassowarySwift.git",
+      "state" : {
+        "branch" : "cassowary-swift-optimizations",
+        "revision" : "b2377a0bb3c0cb43f63278f1a2ef85384d370861"
+      }
+    },
+    {
+      "identity" : "swift-bezier",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/LuizZak/swift-bezier.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "84c8d4614e90fbb39a083bb7463242890ad0e475"
+      }
+    },
+    {
+      "identity" : "swift-blend2d",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/LuizZak/swift-blend2d.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "9a0287fd7b9bdda025c383b6f6c48eb90d00a658"
+      }
+    },
+    {
+      "identity" : "swift-libpng",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/LuizZak/swift-libpng.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "1d5b94c822dde80c4c2d7d742cd50d1d83c5abb1"
+      }
+    },
+    {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "c1ff8be7bc1d877eb24d1ce76b1dd89605160347"
+      }
+    }
+  ],
+  "version" : 3
+}
