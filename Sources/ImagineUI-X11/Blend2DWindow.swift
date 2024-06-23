@@ -6,6 +6,8 @@ import ImagineUI
 
 public class Blend2DWindow: X11Window {
     private var keyboardManager: X11KeyboardManager?
+    private var buffer: Blend2DX11DoubleBuffer?
+    private var gc: GC?
 
     /// Returns the computed size for `content`, based on the window's scale
     /// divided by `dpiScalingFactor`.
@@ -38,6 +40,8 @@ public class Blend2DWindow: X11Window {
         self.content = content
 
         super.init(settings: settings)
+
+        self.gc = XCreateGC(display, window, 0, nil)
     }
 
     public override func initialize() {
@@ -72,7 +76,18 @@ public class Blend2DWindow: X11Window {
     }
 
     private func recreateBuffers() {
+        buffer = nil
 
+        guard contentSize > .zero else {
+            return
+        }
+
+        buffer = .init(
+            contentSize: contentSize.asBLSizeI,
+            format: .xrgb32,
+            display: display,
+            scale: content.preferredRenderScale
+        )
     }
 
     // MARK: Events
@@ -111,7 +126,22 @@ public class Blend2DWindow: X11Window {
         }
         defer { clearNeedsDisplay() }
 
+        guard let buffer else {
+            return
+        }
 
+        let uiRect = UIRectangle(
+            x: Double(event.x),
+            y: Double(event.y),
+            width: Double(event.width),
+            height: Double(event.height)
+        ).scaled(by: 1 / dpiScalingFactor)
+
+        buffer.renderingToBuffer { (buffer, scale) in
+            paintImmediateBuffer(image: buffer, scale: scale, rect: uiRect)
+        }
+
+        buffer.renderBufferToScreen(display, window, gc, rect: uiRect, renderingThreads: 4)
     }
 
     private func paintImmediateBuffer(image: BLImage, scale: UIVector, rect: UIRectangle) {

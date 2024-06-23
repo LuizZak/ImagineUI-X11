@@ -11,14 +11,15 @@ open class X11Window {
     @ConcurrentValue
     internal static var openWindows: [X11Window] = []
 
-    /// X-11 display pointer.
-    private var _display: UnsafeMutablePointer<Display>
     /// X-11 screen pointer.
     private var _screen: UnsafeMutablePointer<Screen>
 
+    /// X-11 display pointer.
+    public let display: UnsafeMutablePointer<Display>
+
     private var _attributes: XWindowAttributes {
         var attributes = XWindowAttributes()
-        XGetWindowAttributes(_display, window, &attributes)
+        XGetWindowAttributes(display, window, &attributes)
         return attributes
     }
 
@@ -80,10 +81,10 @@ open class X11Window {
     public init(settings: CreationSettings) {
         self.size = settings.size
 
-        _display = settings.display
+        display = settings.display
 
         // Get the default screen
-        guard let s = XDefaultScreenOfDisplay(_display) else {
+        guard let s = XDefaultScreenOfDisplay(display) else {
             fatalError("Failed to fetch default screen")
         }
         _screen = s
@@ -93,21 +94,21 @@ open class X11Window {
 
         // Create our window
         window = XCreateSimpleWindow(
-            _display,
+            display,
             rootWindow,
             10, 10, UInt32(settings.size.width), UInt32(settings.size.height),
             1,
             _screen.pointee.black_pixel,
             _screen.pointee.white_pixel
         )
-        XStoreName(_display, window, settings.title)
+        XStoreName(display, window, settings.title)
 
         var xim: XIM
-        if let _xim = XOpenIM(_display, nil, nil, nil) {
+        if let _xim = XOpenIM(display, nil, nil, nil) {
             xim = _xim
         } else {
             XSetLocaleModifiers("@im=none")
-            xim = XOpenIM(_display, nil, nil, nil)
+            xim = XOpenIM(display, nil, nil, nil)
         }
 
         xic = _XCreateIC(xim, window)
@@ -143,7 +144,7 @@ open class X11Window {
             ButtonMotionMask | EnterWindowMask | LeaveWindowMask
 
         XSelectInput(
-            _display,
+            display,
             window,
             eventsMask
         )
@@ -166,7 +167,7 @@ open class X11Window {
         }
 
         // Display the Window on the X11 Server
-        XMapWindow(_display, window)
+        XMapWindow(display, window)
 
         //ShowWindow(hwnd, SW_RESTORE)
     }
@@ -198,8 +199,8 @@ open class X11Window {
 
     open func setNeedsDisplay(_ rect: Rect) {
         let size = _windowSize
-        XClearArea(_display, window, 0, 0, UInt32(size.width), UInt32(size.height), 1 /* generate Expose event? */)
-        XFlush(_display) // Request an expose event asap
+        XClearArea(display, window, 0, 0, UInt32(size.width), UInt32(size.height), 1 /* generate Expose event? */)
+        XFlush(display) // Request an expose event asap
 
         needsDisplay = true
     }
