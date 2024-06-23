@@ -18,7 +18,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", branch: "main"),
     ],
     targets: [
-        .systemLibrary(name: "CX11"),
+        .target(name: "CX11"),
         .target(
             name: "MinX11",
             dependencies: [
@@ -36,7 +36,12 @@ let package = Package(
         ),
         .executableTarget(
             name: "ImagineUI-X11_Sample",
-            dependencies: ["ImagineUI-X11"]
+            dependencies: [
+                "ImagineUI-X11",
+            ],
+            resources: [
+                .copy("Resources/NotoSans-Regular.ttf"),
+            ]
         ),
         .testTarget(
             name: "ImagineUI-X11Tests",

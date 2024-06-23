@@ -1,3 +1,5 @@
+import CX11
+
 public protocol ImagineUIAppDelegate {
     func appDidLaunch() throws
 

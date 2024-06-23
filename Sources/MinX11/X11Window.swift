@@ -43,6 +43,9 @@ open class X11Window {
     public private(set) var needsDisplay: Bool = false
     public private(set) var needsLayout: Bool = false
 
+    /// X11 XIC.
+    public private(set) var xic: XIC
+
     /// DPI, or dots-per-inch- value of the window.
     /// Initializes to `X11Window.defaultDPI` by default.
     public var dpi: Int = X11Window.defaultDPI {
@@ -97,6 +100,18 @@ open class X11Window {
             _screen.pointee.black_pixel,
             _screen.pointee.white_pixel
         )
+        XStoreName(_display, window, settings.title)
+
+        var xim: XIM
+        if let _xim = XOpenIM(_display, nil, nil, nil) {
+            xim = _xim
+        } else {
+            XSetLocaleModifiers("@im=none")
+            xim = XOpenIM(_display, nil, nil, nil)
+        }
+
+        xic = _XCreateIC(xim, window)
+        XSetICFocus(xic)
 
         initialize()
     }
@@ -147,7 +162,7 @@ open class X11Window {
         }
 
         if isDestroyed {
-            //WinLogger.warning("Called show() on a \(X11Window.self) after a WM_DESTROY (onClose()) message has been received. The window will not be shown.")
+            //X11Logger.warning("Called show() on a \(X11Window.self) after a WM_DESTROY (onClose()) message has been received. The window will not be shown.")
         }
 
         // Display the Window on the X11 Server
@@ -217,14 +232,14 @@ open class X11Window {
             return
         }
 
-        
+
     }
 
     /// Called when the window has received a `ConfigureNotify` event.
     ///
     /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
     open func onResize(_ event: XConfigureEvent) {
-        
+
     }
 
     /// Called when the DPI settings for the display the window is hosted on
@@ -232,7 +247,7 @@ open class X11Window {
     ///
     /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/hidpi/wm-dpichanged
     open func onDPIChanged(_ event: XEvent) {
-        
+
     }
 
     // MARK: Mouse events
@@ -300,19 +315,19 @@ open class X11Window {
 
     /// Called when the user releases the left mouse button within the client
     /// area of this window.
-    open func onLeftMouseUp(_ event: XButtonPressedEvent) -> EventResult? {
+    open func onLeftMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user releases the middle mouse button within the client
     /// area of this window.
-    open func onMiddleMouseUp(_ event: XButtonPressedEvent) -> EventResult? {
+    open func onMiddleMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user releases the right mouse button within the client
     /// area of this window.
-    open func onRightMouseUp(_ event: XButtonPressedEvent) -> EventResult? {
+    open func onRightMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         return nil
     }
 
@@ -398,7 +413,7 @@ internal extension X11Window {
                 return onKeyDown(event.xkey)
             case KeyRelease:
                 return onKeyUp(event.xkey)
-            
+
             // Mouse
             case ButtonPress:
                 let event = event.xbutton
@@ -433,19 +448,19 @@ internal extension X11Window {
                     X11Logger.warning("Unknown ButtonPress event button \(event.button)")
                     return nil
                 }
-            
+
             case MotionNotify:
                 return onMouseMove(event.xmotion)
-            
+
             case EnterNotify:
                 return onMouseMove(event.xmotion)
 
             case LeaveNotify:
                 return onMouseLeave(event.xcrossing)
-            
+
             case ConfigureNotify:
                 return onResize(event.xconfigure)
-                
+
             case DestroyNotify:
                 return onClose(event.xdestroywindow)
 

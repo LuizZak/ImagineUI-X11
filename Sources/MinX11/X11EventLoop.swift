@@ -2,7 +2,7 @@ import CX11
 
 /// Handles X11 event loops, forwarding display events to windows.
 public class X11EventLoop {
-    private(set) public var display: UnsafeMutablePointer<Display>
+    public private(set) var display: UnsafeMutablePointer<Display>
     var isRunning: Bool = true
 
     public init() {
@@ -13,7 +13,7 @@ public class X11EventLoop {
 
         display = d
     }
-    
+
     /// Runs the main event loop.
     /// Blocks the caller thread until `X11EventLoop.requestEnd()` is called.
     public func run() {
@@ -23,7 +23,7 @@ public class X11EventLoop {
         while isRunning {
             // Wait for the next event
             XNextEvent(display, &e)
-            
+
             // Find window to forward event to
             let windows = X11Window.openWindows
             for window in windows {

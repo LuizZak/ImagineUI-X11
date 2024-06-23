@@ -4,9 +4,8 @@ import MinX11
 import Blend2DRenderer
 import ImagineUI
 
-public class Blend2DWindow: Win32Window {
-    private var keyboardManager: Win32KeyboardManager?
-    private var buffer: Blend2DGDIDoubleBuffer?
+public class Blend2DWindow: X11Window {
+    private var keyboardManager: X11KeyboardManager?
 
     /// Returns the computed size for `content`, based on the window's scale
     /// divided by `dpiScalingFactor`.
@@ -52,12 +51,12 @@ public class Blend2DWindow: Win32Window {
     }
 
     private func initializeKeyboardManager() {
-        keyboardManager = Win32KeyboardManager(hwnd: hwnd)
+        keyboardManager = X11KeyboardManager(xic: xic)
         keyboardManager?.delegate = self
     }
 
     private func initializeClipboard() {
-        globalTextClipboard = Win32TextClipboard()
+        globalTextClipboard = X11TextClipboard()
     }
 
     private func initializeContent() {
@@ -73,17 +72,7 @@ public class Blend2DWindow: Win32Window {
     }
 
     private func recreateBuffers() {
-        buffer = nil
 
-        guard contentSize > .zero else {
-            return
-        }
-        guard let hdc = GetDC(nil) else {
-            WinLogger.warning("Failed to get device context for screen")
-            return
-        }
-
-        buffer = .init(contentSize: contentSize.asBLSizeI, format: .xrgb32, hdc: hdc, scale: content.preferredRenderScale)
     }
 
     // MARK: Events
@@ -94,54 +83,35 @@ public class Blend2DWindow: Win32Window {
         content.performLayout()
     }
 
-    public override func onResize(_ message: WindowMessage) {
-        super.onResize(message)
+    public override func onResize(_ event: XConfigureEvent) {
+        super.onResize(event)
 
         resizeApp()
     }
 
-    public override func onDPIChanged(_ message: WindowMessage) {
-        super.onDPIChanged(message)
+    public override func onDPIChanged(_ event: XEvent) {
+        super.onDPIChanged(event)
 
         resizeApp()
 
-        WinLogger.info("DPI for window changed: \(dpi), new sizes: contentSize: \(contentSize), scaledContentSize: \(scaledContentSize)")
+        X11Logger.info("DPI for window changed: \(dpi), new sizes: contentSize: \(contentSize), scaledContentSize: \(scaledContentSize)")
     }
 
-    public override func onClose(_ message: WindowMessage) {
-        super.onClose(message)
+    public override func onClose(_ event: XDestroyWindowEvent) {
+        super.onClose(event)
 
-        WinLogger.info("\(self): Closed")
+        X11Logger.info("\(self): Closed")
         _closed.publishEvent(sender: self)
         content.didCloseWindow()
     }
 
-    public override func onPaint(_ message: WindowMessage) {
+    public override func onPaint(_ event: XExposeEvent) {
         guard needsDisplay else {
             return
         }
         defer { clearNeedsDisplay() }
 
-        var ps = PAINTSTRUCT()
-        guard let hdc = BeginPaint(hwnd, &ps) else {
-            WinLogger.warning("BeginPaint returned a nil device context handle")
-            return
-        }
-        defer {
-            EndPaint(hwnd, &ps)
-        }
 
-        guard let buffer = buffer else {
-            return
-        }
-
-        let uiRect = ps.rcPaint.asUIRectangle.scaled(by: 1 / dpiScalingFactor)
-
-        buffer.renderingToBuffer { (buffer, scale) in
-            paintImmediateBuffer(image: buffer, scale: scale, rect: uiRect)
-        }
-
-        buffer.renderBufferToScreen(hdc, rect: ps.rcPaint, renderingThreads: renderingThreads)
     }
 
     private func paintImmediateBuffer(image: BLImage, scale: UIVector, rect: UIRectangle) {
@@ -160,169 +130,154 @@ public class Blend2DWindow: Win32Window {
 
     // MARK: Mouse Events
 
-    public override func onMouseLeave(_ message: WindowMessage) {
+    public override func onMouseLeave(_ event: XLeaveWindowEvent) {
         defer {
             content.mouseLeave()
         }
 
-        super.onMouseLeave(message)
+        super.onMouseLeave(event)
     }
 
-    public override func onMouseMove(_ message: WindowMessage) -> LRESULT? {
+    public override func onMouseMove(_ event: XPointerMovedEvent) -> EventResult? {
         defer {
-            let event = makeMouseEventArgs(message, kind: .other)
+            let event = makeMouseEventArgs(event, kind: .other)
             content.mouseMoved(event: event)
         }
 
-        return super.onMouseMove(message)
+        return super.onMouseMove(event)
     }
 
-    public override func onMouseWheel(_ message: WindowMessage) -> LRESULT? {
+    public override func onMouseWheel(_ event: XButtonPressedEvent) -> EventResult? {
         defer {
-            let event = makeMouseEventArgs(message, kind: .mouseWheel)
+            let event = makeMouseEventArgs(event, kind: .mouseWheel)
             content.mouseScroll(event: event)
         }
 
-        return super.onMouseWheel(message)
+        return super.onMouseWheel(event)
     }
 
-    public override func onMouseHWheel(_ message: WindowMessage) -> LRESULT? {
+    public override func onMouseHWheel(_ event: XButtonPressedEvent) -> EventResult? {
         defer {
-            let event = makeMouseEventArgs(message, kind: .mouseHWheel)
+            let event = makeMouseEventArgs(event, kind: .mouseHWheel)
             content.mouseScroll(event: event)
         }
 
-        return super.onMouseHWheel(message)
+        return super.onMouseHWheel(event)
     }
 
-    public override func onLeftMouseDown(_ message: WindowMessage) -> LRESULT? {
+    public override func onLeftMouseDown(_ event: XButtonPressedEvent) -> EventResult? {
         defer {
-            SetCapture(hwnd)
-
-            let event = makeMouseEventArgs(message, kind: .other, button: .left)
+            let event = makeMouseEventArgs(event, kind: .other, button: .left)
             content.mouseDown(event: event)
         }
 
-        return super.onLeftMouseDown(message)
+        return super.onLeftMouseDown(event)
     }
 
-    public override func onMiddleMouseDown(_ message: WindowMessage) -> LRESULT? {
+    public override func onMiddleMouseDown(_ event: XButtonPressedEvent) -> EventResult? {
         defer {
-            SetCapture(hwnd)
-
-            let event = makeMouseEventArgs(message, kind: .other, button: .middle)
+            let event = makeMouseEventArgs(event, kind: .other, button: .middle)
             content.mouseDown(event: event)
         }
 
-        return super.onMiddleMouseDown(message)
+        return super.onMiddleMouseDown(event)
     }
 
-    public override func onRightMouseDown(_ message: WindowMessage) -> LRESULT? {
+    public override func onRightMouseDown(_ event: XButtonPressedEvent) -> EventResult? {
         defer {
-            SetCapture(hwnd)
-
-            let event = makeMouseEventArgs(message, kind: .other, button: .right)
+            let event = makeMouseEventArgs(event, kind: .other, button: .right)
             content.mouseDown(event: event)
         }
 
-        return super.onRightMouseDown(message)
+        return super.onRightMouseDown(event)
     }
 
-    public override func onLeftMouseUp(_ message: WindowMessage) -> LRESULT? {
+    public override func onLeftMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         defer {
-            ReleaseCapture()
-
-            let event = makeMouseEventArgs(message, kind: .other, button: .left)
+            let event = makeMouseEventArgs(event, kind: .other, button: .left)
             content.mouseUp(event: event)
         }
 
-        return super.onLeftMouseUp(message)
+        return super.onLeftMouseUp(event)
     }
 
-    public override func onMiddleMouseUp(_ message: WindowMessage) -> LRESULT? {
+    public override func onMiddleMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         defer {
-            ReleaseCapture()
-
-            let event = makeMouseEventArgs(message, kind: .other, button: .middle)
+            let event = makeMouseEventArgs(event, kind: .other, button: .middle)
             content.mouseUp(event: event)
         }
 
-        return super.onMiddleMouseUp(message)
+        return super.onMiddleMouseUp(event)
     }
 
-    public override func onRightMouseUp(_ message: WindowMessage) -> LRESULT? {
+    public override func onRightMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         defer {
-            ReleaseCapture()
-
-            let event = makeMouseEventArgs(message, kind: .other, button: .right)
+            let event = makeMouseEventArgs(event, kind: .other, button: .right)
             content.mouseUp(event: event)
         }
 
-        return super.onRightMouseUp(message)
+        return super.onRightMouseUp(event)
     }
 
     // MARK: Keyboard events
 
-    public override func onKeyDown(_ message: WindowMessage) -> LRESULT? {
+    public override func onKeyDown(_ event: XKeyPressedEvent) -> EventResult? {
         guard let keyboardManager = keyboardManager else {
-            return super.onKeyDown(message)
+            return super.onKeyDown(event)
         }
 
-        return keyboardManager.onKeyDown(message)
+        return keyboardManager.onKeyPress(event)
     }
 
-   public  override func onKeyUp(_ message: WindowMessage) -> LRESULT? {
+   public  override func onKeyUp(_ event: XKeyReleasedEvent) -> EventResult? {
         guard let keyboardManager = keyboardManager else {
-            return super.onKeyUp(message)
+            return super.onKeyUp(event)
         }
 
-        return keyboardManager.onKeyUp(message)
-    }
-
-    public override func onSystemKeyDown(_ message: WindowMessage) -> LRESULT? {
-        guard let keyboardManager = keyboardManager else {
-            return super.onSystemKeyDown(message)
-        }
-
-        return keyboardManager.onSystemKeyDown(message)
-    }
-
-    public override func onSystemKeyUp(_ message: WindowMessage) -> LRESULT? {
-        guard let keyboardManager = keyboardManager else {
-            return super.onSystemKeyUp(message)
-        }
-
-        return keyboardManager.onSystemKeyUp(message)
-    }
-
-    public override func onKeyCharDown(_ message: WindowMessage) -> LRESULT? {
-        guard let keyboardManager = keyboardManager else {
-            return super.onKeyCharDown(message)
-        }
-
-        return keyboardManager.onKeyCharDown(message)
-    }
-
-    public override func onKeyChar(_ message: WindowMessage) -> LRESULT? {
-        guard let keyboardManager = keyboardManager else {
-            return super.onKeyChar(message)
-        }
-
-        return keyboardManager.onKeyChar(message)
-    }
-
-    public override func onKeyDeadChar(_ message: WindowMessage) -> LRESULT? {
-        guard let keyboardManager = keyboardManager else {
-            return super.onKeyDeadChar(message)
-        }
-
-        return keyboardManager.onKeyDeadChar(message)
+        return keyboardManager.onKeyRelease(event)
     }
 
     // MARK: Message translation
 
     private func makeMouseEventArgs(
-        _ message: WindowMessage,
+        _ event: XButtonPressedEvent,
+        kind: MouseMessageKind,
+        button: MouseButton = []
+    ) -> MouseEventArgs {
+        // TODO: Handle mouse events
+
+        let result = MouseEventArgs(
+            location: .zero,
+            buttons: .none,
+            delta: .zero,
+            clicks: 0,
+            modifiers: []
+        )
+
+        return result
+    }
+
+    private func makeMouseEventArgs(
+        _ event: XPointerMovedEvent,
+        kind: MouseMessageKind,
+        button: MouseButton = []
+    ) -> MouseEventArgs {
+        // TODO: Handle mouse events
+
+        let result = MouseEventArgs(
+            location: .zero,
+            buttons: .none,
+            delta: .zero,
+            clicks: 0,
+            modifiers: []
+        )
+
+        return result
+    }
+
+    /*
+    private func makeMouseEventArgs(
+        _ event: XEvent,
         kind: MouseMessageKind,
         button: MouseButton = []
     ) -> MouseEventArgs {
@@ -395,6 +350,7 @@ public class Blend2DWindow: Win32Window {
 
         return event
     }
+    */
 
     private enum MouseMessageKind {
         /// WM_MOUSEWHEEL message.
@@ -402,7 +358,7 @@ public class Blend2DWindow: Win32Window {
 
         /// WM_MOUSEHWHEEL message.
         case mouseHWheel
-        
+
         /// Any other mouse message.
         case other
 
@@ -417,16 +373,18 @@ public class Blend2DWindow: Win32Window {
     }
 }
 
-extension Blend2DWindow: Win32KeyboardManagerDelegate {
-    public func keyboardManager(_ manager: Win32KeyboardManager, onKeyPress event: Win32KeyPressEventArgs) {
-        content.keyPress(event: event.asKeyPressEventArgs)
-    }
-
-    public func keyboardManager(_ manager: Win32KeyboardManager, onKeyDown event: Win32KeyEventArgs) {
+extension Blend2DWindow: X11KeyboardManagerDelegate {
+    public func keyboardManager(
+        _ manager: X11KeyboardManager,
+        onKeyRelease event: X11KeyEventArgs
+    ) {
         content.keyDown(event: event.asKeyEventArgs)
     }
 
-    public func keyboardManager(_ manager: Win32KeyboardManager, onKeyUp event: Win32KeyEventArgs) {
+    public func keyboardManager(
+        _ manager: X11KeyboardManager,
+        onKeyPress event: X11KeyEventArgs
+    ) {
         content.keyUp(event: event.asKeyEventArgs)
     }
 }
@@ -446,7 +404,7 @@ extension Blend2DWindow: ImagineUIContentDelegate {
             .inflatedBy(.init(repeating: 3.0))
             .scaled(by: dpiScalingFactor)
             .roundedToLargest()
-        
+
         setNeedsDisplay(screenBounds.asRect)
     }
 
@@ -455,6 +413,7 @@ extension Blend2DWindow: ImagineUIContentDelegate {
         cursor: MouseCursorKind
     ) {
 
+            /*!SECTION
         var hCursor: HCURSOR?
 
         // TODO: Implement cursor change
@@ -490,6 +449,7 @@ extension Blend2DWindow: ImagineUIContentDelegate {
             SetCursor(hCursor)
             SetClassLongPtrW(hwnd, GCLP_HCURSOR, hCursorToLONG_PTR(hCursor))
         }
+        */
     }
 
     public func setMouseHiddenUntilMouseMoves(_ content: ImagineUIContentType) {
@@ -502,7 +462,8 @@ extension Blend2DWindow: ImagineUIContentDelegate {
     ) {
 
         if newFirstResponder != nil {
-            SetFocus(hwnd)
+            //SetFocus(hwnd)
+            XSetICFocus(xic)
         }
     }
 

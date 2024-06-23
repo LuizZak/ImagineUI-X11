@@ -1,5 +1,6 @@
 import Foundation
 import ImagineUI
+import CX11
 import MinX11
 
 public class ImagineUIApp {
@@ -21,7 +22,7 @@ public class ImagineUIApp {
     /// Opens a window to show a given content.
     public func show(content: ImagineUIContentType) {
         let settings = X11Window.CreationSettings(
-            title: "ImagineUI-Win Sample Window",
+            title: "ImagineUI-X11 Sample Window",
             size: content.size.asSize,
             display: eventLoop.display
         )
@@ -34,21 +35,13 @@ public class ImagineUIApp {
     /// The program is not quit immediately, and may still process events after
     /// the quit request before closing.
     public func requestQuit() {
-        WinLogger.info("Application requested termination.")
+        X11Logger.info("Application requested termination.")
 
-        PostQuitMessage(0)
+        eventLoop.requestEnd()
     }
 
     /// Initializes the main run loop of the application.
     public func run(settings: ImagineUIAppStartupSettings) throws -> Int32 {
-        // Initialize COM
-        do {
-            try CoInitializeEx(COINIT_MULTITHREADED)
-        } catch {
-            WinLogger.error("CoInitializeEx: \(error)")
-            return EXIT_FAILURE
-        }
-
         try UISettings.initialize(
             .init(
                 fontManager: settings.fontManager,
@@ -57,9 +50,14 @@ public class ImagineUIApp {
             )
         )
 
+        try delegate.appDidLaunch()
+
+        eventLoop.run()
+
+        /*
         // Enable Per Monitor DPI Awareness
         if !SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) {
-            WinLogger.error("SetProcessDpiAwarenessContext: \(Win32Error(win32: GetLastError()))")
+            X11Logger.error("SetProcessDpiAwarenessContext: \(Win32Error(win32: GetLastError()))")
         }
 
         let dwICC: DWORD =
@@ -75,9 +73,9 @@ public class ImagineUIApp {
                 dwSize: DWORD(MemoryLayout<INITCOMMONCONTROLSEX>.size),
                 dwICC: dwICC
             )
-        
+
         if !InitCommonControlsEx(&ICCE) {
-            WinLogger.error("InitCommonControlsEx: \(Win32Error(win32: GetLastError()))")
+            X11Logger.error("InitCommonControlsEx: \(Win32Error(win32: GetLastError()))")
         }
 
         var pAppRegistration: PAPPSTATE_REGISTRATION?
@@ -87,9 +85,9 @@ public class ImagineUIApp {
                 unsafeBitCast(self as AnyObject, to: PVOID.self),
                 &pAppRegistration
             )
-        
+
         if ulStatus != ERROR_SUCCESS {
-            WinLogger.error("RegisterAppStateChangeNotification: \(Win32Error(win32: GetLastError()))")
+            X11Logger.error("RegisterAppStateChangeNotification: \(Win32Error(win32: GetLastError()))")
         }
 
         try delegate.appDidLaunch()
@@ -129,6 +127,9 @@ public class ImagineUIApp {
             //_ = WaitMessage(DWORD(exactly: (limitDate?.timeIntervalSinceNow ?? 0) * 1000) ?? DWORD.max)
             _ = WaitMessage(limitDate: limitDate)
         }
+        */
+
+        var nExitCode: Int32 = EXIT_SUCCESS
 
         return nExitCode
     }
@@ -142,6 +143,7 @@ public class ImagineUIApp {
     }
 }
 
+/*
 private let pApplicationStateChangeRoutine: PAPPSTATE_CHANGE_ROUTINE = { (quiesced: UInt8, context: PVOID?) in
     guard let app = unsafeBitCast(context, to: AnyObject.self) as? ImagineUIApp else {
         return
@@ -177,3 +179,4 @@ private func WaitMessage(_ dwMilliseconds: UINT) -> Bool {
 
     return WinSDK.WaitMessage()
 }
+*/

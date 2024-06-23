@@ -1,7 +1,9 @@
 module CX11 [system] {
-    header "macros.h"
+    header "../shims.h"
     module Xlib {
         header "/usr/include/X11/Xlib.h"
+        header "/usr/include/X11/keysym.h"
+        header "/usr/include/X11/keysymdef.h"
     }
     module X {
         header "/usr/include/X11/X.h"
