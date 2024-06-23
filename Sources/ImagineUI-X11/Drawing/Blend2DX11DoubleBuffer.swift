@@ -3,7 +3,7 @@ import SwiftBlend2D
 import ImagineUI
 
 class Blend2DX11DoubleBuffer {
-    private var contentSize: BLSizeI
+    private(set) internal var contentSize: BLSizeI
     private var scale: UIVector
     private let format: BLFormat
 
@@ -14,6 +14,7 @@ class Blend2DX11DoubleBuffer {
         contentSize: BLSizeI,
         format: BLFormat,
         display: UnsafeMutablePointer<Display>,
+        vinfo: XVisualInfo?,
         scale: UIVector = .init(repeating: 1)
     ) {
 
@@ -25,7 +26,8 @@ class Blend2DX11DoubleBuffer {
             size: contentSize,
             format: format,
             scale: scale,
-            display: display
+            display: display,
+            vinfo: vinfo
         )
     }
 
@@ -39,7 +41,8 @@ class Blend2DX11DoubleBuffer {
     func resizeBuffer(
         primary: BLSizeI,
         scale: UIVector,
-        display: UnsafeMutablePointer<Display>
+        display: UnsafeMutablePointer<Display>,
+        vinfo: XVisualInfo?
     ) {
         guard contentSize != primary || self.scale != scale else { return }
 
@@ -47,7 +50,8 @@ class Blend2DX11DoubleBuffer {
             size: primary,
             format: format,
             scale: scale,
-            display: display
+            display: display,
+            vinfo: vinfo
         )
     }
 
@@ -155,10 +159,11 @@ private enum BufferKind {
         size: BLSizeI,
         format: BLFormat,
         scale: UIVector,
-        display: UnsafeMutablePointer<Display>
+        display: UnsafeMutablePointer<Display>,
+        vinfo: XVisualInfo?
     ) -> Self {
 
-        let secondary = Blend2DImageBuffer(size: size, display: display)
+        let secondary = Blend2DImageBuffer(size: size, display: display, vinfo: vinfo)
 
         if scale == 1.0 {
             return .singleBuffer(secondary)

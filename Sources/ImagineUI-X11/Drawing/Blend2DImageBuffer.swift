@@ -6,7 +6,11 @@ class Blend2DImageBuffer {
     let buffer: UnsafeMutableRawPointer
     let blImage: BLImage
 
-    init(size: BLSizeI, display: UnsafeMutablePointer<Display>) {
+    init(
+        size: BLSizeI,
+        display: UnsafeMutablePointer<Display>,
+        vinfo: XVisualInfo?
+    ) {
         precondition(size.w > 0 && size.h > 0, "size.w > 0 && size.h > 0")
 
         let bpp = 4
@@ -22,18 +26,33 @@ class Blend2DImageBuffer {
             format: .xrgb32
         )
 
-        image = XCreateImage(
-            display,
-            nil /* CopyFromParent */,
-            UInt32(depth),
-            ZPixmap,
-            0,
-            buffer.assumingMemoryBound(to: CChar.self),
-            UInt32(size.w),
-            UInt32(size.h),
-            32,
-            0
-        )
+        if let vinfo {
+            image = XCreateImage(
+                display,
+                vinfo.visual,
+                UInt32(vinfo.depth),
+                ZPixmap,
+                0,
+                buffer.assumingMemoryBound(to: CChar.self),
+                UInt32(size.w),
+                UInt32(size.h),
+                32,
+                0
+            )
+        } else {
+            image = XCreateImage(
+                display,
+                nil,
+                UInt32(depth),
+                ZPixmap,
+                0,
+                buffer.assumingMemoryBound(to: CChar.self),
+                UInt32(size.w),
+                UInt32(size.h),
+                32,
+                0
+            )
+        }
     }
 
     deinit {

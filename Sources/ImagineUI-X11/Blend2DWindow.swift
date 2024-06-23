@@ -40,8 +40,6 @@ public class Blend2DWindow: X11Window {
         self.content = content
 
         super.init(settings: settings)
-
-        self.gc = XCreateGC(display, window, 0, nil)
     }
 
     public override func initialize() {
@@ -82,10 +80,16 @@ public class Blend2DWindow: X11Window {
             return
         }
 
+        if let gc {
+            XFreeGC(display, gc)
+        }
+
+        gc = XCreateGC(display, window, 0, nil)
         buffer = .init(
             contentSize: contentSize.asBLSizeI,
             format: .xrgb32,
             display: display,
+            vinfo: visualInfo,
             scale: content.preferredRenderScale
         )
     }

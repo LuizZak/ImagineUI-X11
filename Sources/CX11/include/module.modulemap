@@ -1,12 +1,9 @@
 module CX11 [system] {
     header "../shims.h"
-    module Xlib {
-        header "/usr/include/X11/Xlib.h"
-        header "/usr/include/X11/keysym.h"
-        header "/usr/include/X11/keysymdef.h"
-    }
-    module X {
-        header "/usr/include/X11/X.h"
-    }
+    header "/usr/include/X11/Xlib.h"
+    header "/usr/include/X11/Xutil.h"
+    header "/usr/include/X11/keysym.h"
+    header "/usr/include/X11/keysymdef.h"
+    header "/usr/include/X11/X.h"
     link "X11"
 }

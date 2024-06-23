@@ -11,12 +11,6 @@ open class X11Window {
     @ConcurrentValue
     internal static var openWindows: [X11Window] = []
 
-    /// X-11 screen pointer.
-    private var _screen: UnsafeMutablePointer<Screen>
-
-    /// X-11 display pointer.
-    public let display: UnsafeMutablePointer<Display>
-
     private var _attributes: XWindowAttributes {
         var attributes = XWindowAttributes()
         XGetWindowAttributes(display, window, &attributes)
@@ -75,8 +69,17 @@ open class X11Window {
     /// Defaults to `true`.
     public var trackMouseLeave: Bool = true
 
+    /// X-11 screen pointer.
+    public let screen: UnsafeMutablePointer<Screen>
+
+    /// X-11 display pointer.
+    public let display: UnsafeMutablePointer<Display>
+
     /// The handle for the underlying X11 window object.
     public let window: Window
+
+    /// X-11 visual info for created window.
+    public let visualInfo: XVisualInfo
 
     public init(settings: CreationSettings) {
         self.size = settings.size
@@ -87,21 +90,53 @@ open class X11Window {
         guard let s = XDefaultScreenOfDisplay(display) else {
             fatalError("Failed to fetch default screen")
         }
-        _screen = s
+        screen = s
 
         // And the current root window on that screen
-        let rootWindow = _screen.pointee.root
+        let rootWindow = XRootWindowOfScreen(screen)
 
         // Create our window
+        /*
         window = XCreateSimpleWindow(
             display,
             rootWindow,
             10, 10, UInt32(settings.size.width), UInt32(settings.size.height),
             1,
-            _screen.pointee.black_pixel,
-            _screen.pointee.white_pixel
+            screen.pointee.black_pixel,
+            screen.pointee.white_pixel
+        )
+        */
+
+        var visualInfo: XVisualInfo = .init()
+        let result = XMatchVisualInfo(
+            display,
+            XDefaultScreen(display),
+            32,
+            TrueColor,
+            &visualInfo
+        )
+        if result == 0 {
+            fatalError("Failed to resolve 32-bit TrueColor visual information.")
+        }
+        var attr: XSetWindowAttributes = .init()
+        attr.colormap = XCreateColormap(display, rootWindow, visualInfo.visual, AllocNone)
+        attr.border_pixel = 0
+        attr.background_pixel = 0xFFFFFFFF
+
+        window = XCreateWindow(
+            display,
+            rootWindow,
+            10, 10, UInt32(settings.size.width), UInt32(settings.size.height),
+            1,
+            visualInfo.depth,
+            UInt32(InputOutput),
+            visualInfo.visual,
+            UInt(CWColormap | CWBorderPixel | CWBackPixel),
+            &attr
         )
         XStoreName(display, window, settings.title)
+
+        self.visualInfo = visualInfo
 
         var xim: XIM
         if let _xim = XOpenIM(display, nil, nil, nil) {
@@ -123,6 +158,8 @@ open class X11Window {
                 openWindows.remove(at: index)
             }
         }
+
+        XFreeColormap(display, _attributes.colormap)
     }
 
     /// Configures mouse tracking for the current window so mouse leave events
@@ -220,6 +257,8 @@ open class X11Window {
     /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-destroy
     open func onClose(_ event: XDestroyWindowEvent) {
         isDestroyed = true
+
+        onDestroy()
     }
 
     /// Called when the window has received a a `ExposureNotify` event.
