@@ -324,7 +324,7 @@ open class X11Window {
 
     /// Called when the window has received a `DestroyNotify` event.
     ///
-    /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-destroy
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#DestroyNotify_Events
     open func onClose(_ event: XDestroyWindowEvent) {
         isDestroyed = true
 
@@ -336,14 +336,14 @@ open class X11Window {
     /// Classes that override this method should handle updating needsDisplay and
     /// should not call `super.onPaint()` if GDI draw calls where made.
     ///
-    /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/gdi/wm-paint
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Expose_Events
     open func onPaint(_ event: XExposeEvent) {
         needsDisplay = false
     }
 
     /// Called when the window has received a `ConfigureNotify` event.
     ///
-    /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#ConfigureNotify_Events
     open func onResize(_ event: XConfigureEvent) {
         size.width = Int(event.width)
         size.height = Int(event.height)
@@ -354,7 +354,7 @@ open class X11Window {
     /// Called when the DPI settings for the display the window is hosted on
     /// changes.
     ///
-    /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/hidpi/wm-dpichanged
+    /// X11 API reference: ??? (not tied to any event currently)
     open func onDPIChanged(_ event: XEvent) {
         print(event)
     }
@@ -362,6 +362,8 @@ open class X11Window {
     // MARK: Mouse events
 
     /// Called when the mouse leaves the client area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Window_EntryExit_Events
     open func onMouseLeave(_ event: XLeaveWindowEvent) {
         isMouseTrackingOn = false
     }
@@ -372,7 +374,7 @@ open class X11Window {
     /// This event is not setup automatically and `TrackMouseEvent` needs to be
     /// invoked in order to setup this type of tracking behaviour.
     ///
-    /// Win32 API reference: https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousehover
+    /// X11 API reference: ??? (not tied to any event currently)
     open func onMouseHover(_ event: XEvent) {
         isMouseTrackingOn = false
     }
@@ -381,6 +383,8 @@ open class X11Window {
     ///
     /// Also sets up mouse tracking so `onMouseLeave(_:)` can be raised next time
     /// the mouse leaves the control area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Keyboard_and_Pointer_Events
     open func onMouseMove(_ event: XPointerMovedEvent) -> EventResult? {
         if trackMouseLeave {
             setupMouseTracking()
@@ -392,6 +396,8 @@ open class X11Window {
     /// Called when the mouse scrolls within the client area of this window.
     ///
     /// Equivalent to Buttons 4 and 5.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onMouseWheel(_ event: XButtonPressedEvent) -> EventResult? {
         return nil
     }
@@ -400,42 +406,56 @@ open class X11Window {
     /// client area of this window.
     ///
     /// Equivalent to Buttons 6 and 7.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onMouseHWheel(_ event: XButtonPressedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user presses down the left mouse button within the client
     /// area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onLeftMouseDown(_ event: XButtonPressedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user presses down the middle mouse button within the client
     /// area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onMiddleMouseDown(_ event: XButtonPressedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user presses down the right mouse button within the client
     /// area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onRightMouseDown(_ event: XButtonPressedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user releases the left mouse button within the client
     /// area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onLeftMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user releases the middle mouse button within the client
     /// area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onMiddleMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user releases the right mouse button within the client
     /// area of this window.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Pointer_Button_Events
     open func onRightMouseUp(_ event: XButtonReleasedEvent) -> EventResult? {
         return nil
     }
@@ -443,11 +463,15 @@ open class X11Window {
     // MARK: Keyboard events
 
     /// Called when the user presses a keyboard key while this window has focus.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Keyboard_and_Pointer_Events
     open func onKeyDown(_ event: XKeyPressedEvent) -> EventResult? {
         return nil
     }
 
     /// Called when the user releases a keyboard key while this window has focus.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Keyboard_and_Pointer_Events
     open func onKeyUp(_ event: XKeyReleasedEvent) -> EventResult? {
         return nil
     }
@@ -510,7 +534,12 @@ internal extension X11Window {
                 return onMouseLeave(event.xcrossing)
 
             case ConfigureNotify:
-                return onResize(event.xconfigure)
+                let event = event.xconfigure
+                if event.width == size.width && event.height == size.height {
+                    return ()
+                }
+
+                return onResize(event)
 
             case DestroyNotify:
                 return onClose(event.xdestroywindow)
@@ -521,6 +550,7 @@ internal extension X11Window {
     }
 }
 
+// Used during debugging
 private enum _XEventType: Int32 {
     case KeyPress = 2
     case KeyRelease = 3
