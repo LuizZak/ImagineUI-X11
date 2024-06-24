@@ -312,7 +312,6 @@ public class Blend2DWindow: X11Window {
 
         let location = UIVector(x: Double(event.x), y: Double(event.y))
 
-        let buttons = mouseButtonsFromState(event.state)
         let modifiers = keyboardModifiersFromState(event.state)
 
         var delta: UIVector = .zero
@@ -324,7 +323,7 @@ public class Blend2DWindow: X11Window {
 
         let result = MouseEventArgs(
             location: location / dpiScalingFactor,
-            buttons: buttons,
+            buttons: button,
             delta: delta,
             clicks: 0,
             modifiers: modifiers
