@@ -7,6 +7,7 @@ import ImagineUI
 public class Blend2DWindow: X11Window {
     private var keyboardManager: X11KeyboardManager?
     private var buffer: Blend2DX11DoubleBuffer?
+    private var backBuffer: XdbeBackBuffer?
     private var gc: GC?
 
     /// Returns the computed size for `content`, based on the window's scale
@@ -40,6 +41,8 @@ public class Blend2DWindow: X11Window {
         self.content = content
 
         super.init(settings: settings)
+
+        self.backBuffer = XdbeAllocateBackBufferName(display, window, 0)
     }
 
     public override func initialize() {
@@ -85,6 +88,13 @@ public class Blend2DWindow: X11Window {
         }
 
         gc = XCreateGC(display, window, 0, nil)
+
+        var color: XColor = .init()
+        color.red = 32000
+        color.flags = CChar(truncatingIfNeeded: DoRed)
+        XAllocColor(display, colorMap, &color)
+        XSetForeground(display, gc, color.pixel)
+
         buffer = .init(
             contentSize: contentSize.asBLSizeI,
             format: .xrgb32,
@@ -130,7 +140,7 @@ public class Blend2DWindow: X11Window {
         }
         defer { clearNeedsDisplay() }
 
-        guard let buffer else {
+        guard let buffer, let backBuffer else {
             return
         }
 
@@ -139,20 +149,32 @@ public class Blend2DWindow: X11Window {
             y: Double(event.y),
             width: Double(event.width),
             height: Double(event.height)
-        ).scaled(by: 1 / dpiScalingFactor)
+        )
 
         buffer.renderingToBuffer { (buffer, scale) in
             paintImmediateBuffer(image: buffer, scale: scale, rect: uiRect)
         }
 
-        buffer.renderBufferToScreen(display, window, gc, rect: uiRect, renderingThreads: 4)
+        let drawTarget = backBuffer
+
+        buffer.renderBufferToScreen(display, drawTarget, gc, rect: uiRect, renderingThreads: 4)
+
+        var swapInfo = XdbeSwapInfo(
+            swap_window: window,
+            swap_action: XdbeSwapAction(XdbeCopied)
+        )
+        XdbeSwapBuffers(display, &swapInfo, 1)
     }
 
     private func paintImmediateBuffer(image: BLImage, scale: UIVector, rect: UIRectangle) {
         let options = BLContext.CreateOptions(threadCount: renderingThreads)
         let ctx = BLContext(image: image, options: options)!
 
-        let clip = UIRegionClipRegion(region: .init(rectangle: rect))
+        let clip = UIRegionClipRegion(
+            region: .init(
+                rectangle: rect.scaled(by: 1 / dpiScalingFactor)
+            )
+        )
 
         let renderer = Blend2DRenderer(context: ctx)
 
@@ -280,12 +302,22 @@ public class Blend2DWindow: X11Window {
     ) -> MouseEventArgs {
         // TODO: Handle mouse events
 
+        let location = UIVector(x: Double(event.x), y: Double(event.y))
+        let modifiers = keyboardModifiersFromState(event.state)
+
+        var delta: UIVector = .zero
+        if event.button == Button4 {
+            delta = .init(x: 0, y: 10)
+        } else if event.button == Button5 {
+            delta = .init(x: 0, y: -10)
+        }
+
         let result = MouseEventArgs(
-            location: .zero,
+            location: location / dpiScalingFactor,
             buttons: .none,
-            delta: .zero,
+            delta: delta,
             clicks: 0,
-            modifiers: []
+            modifiers: modifiers
         )
 
         return result
@@ -296,95 +328,57 @@ public class Blend2DWindow: X11Window {
         kind: MouseMessageKind,
         button: MouseButton = []
     ) -> MouseEventArgs {
+
         // TODO: Handle mouse events
+        let location = UIVector(x: Double(event.x), y: Double(event.y))
+
+        let buttons = mouseButtonsFromState(event.state)
+        let modifiers = keyboardModifiersFromState(event.state)
 
         let result = MouseEventArgs(
-            location: .zero,
-            buttons: .none,
+            location: location / dpiScalingFactor,
+            buttons: buttons,
             delta: .zero,
             clicks: 0,
-            modifiers: []
+            modifiers: modifiers
         )
 
         return result
     }
 
-    /*
-    private func makeMouseEventArgs(
-        _ event: XEvent,
-        kind: MouseMessageKind,
-        button: MouseButton = []
-    ) -> MouseEventArgs {
+    private func mouseButtonsFromState(_ state: UInt32) -> MouseButton {
+        let state = Int32(state)
 
-        var x = GET_X_LPARAM(message.lParam)
-        var y = GET_Y_LPARAM(message.lParam)
-
-        // Mouse wheel events receive screen space coordinates instead of client
-        // space, so we need to convert to client space before proceeding.
-        if kind.isWheelMessage {
-            var point = POINT(x: LONG(x), y: LONG(y))
-            ScreenToClient(hwnd, &point)
-            x = Int16(point.x)
-            y = Int16(point.y)
-        }
-
-        let location = UIVector(x: Double(x), y: Double(y)) / dpiScalingFactor
-        var buttons: MouseButton = button
-        var modifiers: KeyboardModifier = []
-        var delta = UIVector.zero
-
-        // Extract mouse wheel scroll and virtual key parameters
-        let keyParam: WPARAM
-        if kind.isWheelMessage {
-            // TODO: Expose this property for customization.
-            let wheelMultiplier = 5.0
-
-            let amount = Double(Int32(GET_WHEEL_DELTA_WPARAM(message.wParam)) / WHEEL_DELTA) * wheelMultiplier
-
-            switch kind {
-            case .mouseWheel:
-                delta.y = amount
-            case .mouseHWheel:
-                delta.x = amount
-            case .other:
-                break
-            }
-
-            keyParam = WPARAM(GET_KEYSTATE_WPARAM(message.wParam))
-        } else {
-            keyParam = WPARAM(message.wParam)
-        }
-
-        // Buttons
-        if IS_BIT_ON(keyParam, MK_LBUTTON) {
+        var buttons: MouseButton = []
+        if (state & Button1Mask) == Button1Mask {
             buttons.insert(.left)
         }
-        if IS_BIT_ON(keyParam, MK_MBUTTON) {
+        if (state & Button2Mask) == Button2Mask {
             buttons.insert(.middle)
         }
-        if IS_BIT_ON(keyParam, MK_RBUTTON) {
+        if (state & Button3Mask) == Button3Mask {
             buttons.insert(.right)
         }
 
-        // Modifiers
-        if IS_BIT_ON(keyParam, MK_CONTROL) {
-            modifiers.insert(.control)
-        }
-        if IS_BIT_ON(keyParam, MK_SHIFT) {
+        return buttons
+    }
+
+    private func keyboardModifiersFromState(_ state: UInt32) -> KeyboardModifier {
+        let state = Int32(state)
+
+        var modifiers: KeyboardModifier = []
+        if (state & ShiftMask) == ShiftMask {
             modifiers.insert(.shift)
         }
+        if (state & ControlMask) == ControlMask {
+            modifiers.insert(.control)
+        }
+        if (state & Mod1Mask) == Mod1Mask {
+            modifiers.insert(.alt)
+        }
 
-        let event = MouseEventArgs(
-            location: location,
-            buttons: buttons,
-            delta: delta,
-            clicks: 0,
-            modifiers: modifiers
-        )
-
-        return event
+        return modifiers
     }
-    */
 
     private enum MouseMessageKind {
         /// WM_MOUSEWHEEL message.
@@ -436,7 +430,6 @@ extension Blend2DWindow: ImagineUIContentDelegate {
 
         let screenBounds = bounds
             .inflatedBy(.init(repeating: 3.0))
-            .scaled(by: dpiScalingFactor)
             .roundedToLargest()
 
         setNeedsDisplay(screenBounds.asRect)
@@ -447,10 +440,9 @@ extension Blend2DWindow: ImagineUIContentDelegate {
         cursor: MouseCursorKind
     ) {
 
-            /*!SECTION
+        /* TODO: Implement cursor change
         var hCursor: HCURSOR?
 
-        // TODO: Implement cursor change
         switch cursor {
         case .arrow:
             hCursor = LoadCursorW(nil, IDC_ARROW)

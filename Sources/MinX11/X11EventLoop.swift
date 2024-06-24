@@ -1,4 +1,5 @@
 import CX11
+import Foundation
 
 /// Handles X11 event loops, forwarding display events to windows.
 public class X11EventLoop {
@@ -21,15 +22,34 @@ public class X11EventLoop {
         var e: XEvent = .init()
 
         while isRunning {
-            // Wait for the next event
-            XNextEvent(display, &e)
+            while XPending(display) > 0 {
+                // Wait for the next event
+                XNextEvent(display, &e)
 
-            // Find window to forward event to
-            let windows = X11Window.openWindows
-            for window in windows {
-                if window.window == e.xany.window {
-                    window.handleEvent(e)
+                // Find window to forward event to
+                let windows = X11Window.openWindows
+                for window in windows {
+                    if window.window == e.xany.window {
+                        window.handleEvent(e)
+                    }
                 }
+            }
+
+            var limitDate: Date? = nil
+            repeat {
+                // Execute Foundation.RunLoop once and determine the next time
+                // the timer fires. At this point handle all Foundation.RunLoop
+                // timers, sources and Dispatch.DispatchQueue.main tasks
+                limitDate = RunLoop.main.limitDate(forMode: .default)
+
+                // If Foundation.RunLoop doesn't contain any timers or the timers
+                // should not be running right now, we interrupt the current loop
+                // or otherwise continue to the next iteration.
+            } while (limitDate?.timeIntervalSinceNow ?? -1) <= 0
+
+            // Ensure windows are properly invalidated
+            for window in X11Window.openWindows {
+                window.flushRedisplayAreas()
             }
         }
     }

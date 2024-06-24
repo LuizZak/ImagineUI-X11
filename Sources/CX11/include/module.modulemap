@@ -5,5 +5,7 @@ module CX11 [system] {
     header "/usr/include/X11/keysym.h"
     header "/usr/include/X11/keysymdef.h"
     header "/usr/include/X11/X.h"
+    header "/usr/include/X11/extensions/Xdbe.h"
     link "X11"
+    link "Xext"
 }

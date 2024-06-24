@@ -22,6 +22,8 @@ open class X11Window {
         return (attr.width, attr.height)
     }
 
+    private var _redisplayAreas: [Rect] = []
+
     private let minSize: Size = Size(width: 200, height: 150)
 
     /// Set to `true` when a `WM_DESTROY` message has been received.
@@ -78,6 +80,9 @@ open class X11Window {
     /// The handle for the underlying X11 window object.
     public let window: Window
 
+    /// X-11 color map for created window.
+    public let colorMap: Colormap
+
     /// X-11 visual info for created window.
     public let visualInfo: XVisualInfo
 
@@ -96,17 +101,6 @@ open class X11Window {
         let rootWindow = XRootWindowOfScreen(screen)
 
         // Create our window
-        /*
-        window = XCreateSimpleWindow(
-            display,
-            rootWindow,
-            10, 10, UInt32(settings.size.width), UInt32(settings.size.height),
-            1,
-            screen.pointee.black_pixel,
-            screen.pointee.white_pixel
-        )
-        */
-
         var visualInfo: XVisualInfo = .init()
         let result = XMatchVisualInfo(
             display,
@@ -118,8 +112,10 @@ open class X11Window {
         if result == 0 {
             fatalError("Failed to resolve 32-bit TrueColor visual information.")
         }
+        colorMap = XCreateColormap(display, rootWindow, visualInfo.visual, AllocNone)
+
         var attr: XSetWindowAttributes = .init()
-        attr.colormap = XCreateColormap(display, rootWindow, visualInfo.visual, AllocNone)
+        attr.colormap = colorMap
         attr.border_pixel = 0
         attr.background_pixel = 0xFFFFFFFF
 
@@ -159,7 +155,7 @@ open class X11Window {
             }
         }
 
-        XFreeColormap(display, _attributes.colormap)
+        XFreeColormap(display, colorMap)
     }
 
     /// Configures mouse tracking for the current window so mouse leave events
@@ -193,20 +189,19 @@ open class X11Window {
     ///
     /// Should not be called if the window has been closed.
     open func show() {
+        guard !isDestroyed else {
+            X11Logger.warning("Called show() on a \(X11Window.self) after a XDestroyWindow (onClose()) message has been received. The window will not be shown.")
+            return
+        }
+
         X11Window._openWindows.withWriteAccess { openWindows in
             if !openWindows.contains(where: { $0 === self }) {
                 openWindows.append(self)
             }
         }
 
-        if isDestroyed {
-            //X11Logger.warning("Called show() on a \(X11Window.self) after a WM_DESTROY (onClose()) message has been received. The window will not be shown.")
-        }
-
         // Display the Window on the X11 Server
         XMapWindow(display, window)
-
-        //ShowWindow(hwnd, SW_RESTORE)
     }
 
     open func setNeedsLayout() {
@@ -214,11 +209,7 @@ open class X11Window {
         needsLayout = true
 
         RunLoop.main.perform { [weak self] in
-            guard let self = self else { return }
-
-            while self.needsLayout {
-                self.onLayout()
-            }
+            self?._performLayoutAndDisplay()
         }
     }
 
@@ -235,11 +226,76 @@ open class X11Window {
     }
 
     open func setNeedsDisplay(_ rect: Rect) {
-        let size = _windowSize
-        XClearArea(display, window, 0, 0, UInt32(size.width), UInt32(size.height), 1 /* generate Expose event? */)
-        XFlush(display) // Request an expose event asap
+        guard rect.size.width > 0 && rect.size.height > 0 else {
+            return
+        }
 
-        needsDisplay = true
+        self.needsDisplay = true
+
+        // Scale the rectangle appropriately
+        let rect = rect.scaled(by: dpiScalingFactor)
+
+        _redisplayAreas.append(rect)
+    }
+
+    func _performLayoutAndDisplay() {
+        while needsLayout {
+            onLayout()
+        }
+
+        flushRedisplayAreas()
+    }
+
+    /// Flushes all entries of `setNeedsDisplay()` calls made so far into a sequence
+    /// of underlying OS messages to be handled on a subsequent draw event operation
+    /// on this window.
+    func flushRedisplayAreas() {
+        guard !self.isDestroyed, let first = _redisplayAreas.first else { return }
+        defer { _redisplayAreas.removeAll() }
+
+        let merged = _redisplayAreas.reduce(first) { $0.union($1) }
+        _redisplayAreas = [merged]
+
+        for (i, rect) in _redisplayAreas.enumerated() {
+            let remaining = _redisplayAreas.count - i - 1
+#if true
+            var event: XExposeEvent = .init()
+            event.window = window
+            event.type = Expose
+            event.display = display
+            event.x = Int32(rect.origin.x)
+            event.y = Int32(rect.origin.y)
+            event.width = Int32(rect.size.width)
+            event.height = Int32(rect.size.height)
+            event.count = Int32(remaining)
+
+            // Clamp coordinates
+            event.x = max(0, event.x)
+            event.y = max(0, event.y)
+
+            var xEvent = XEvent(xexpose: event)
+            XSendEvent(
+                display,
+                window,
+                1,
+                ExposureMask,
+                &xEvent
+            )
+#else
+            _=remaining // Unused
+            XClearArea(
+                self.display,
+                self.window,
+                Int32(rect.origin.x),
+                Int32(rect.origin.y),
+                UInt32(rect.size.width),
+                UInt32(rect.size.height),
+                1 /* generate Expose event? */
+            )
+#endif
+        }
+
+        XFlush(display)
     }
 
     // MARK: Layout events
@@ -279,7 +335,10 @@ open class X11Window {
     ///
     /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-size
     open func onResize(_ event: XConfigureEvent) {
+        size.width = Int(event.width)
+        size.height = Int(event.height)
 
+        dpi = Int(displayScaling(display))
     }
 
     /// Called when the DPI settings for the display the window is hosted on
@@ -287,7 +346,7 @@ open class X11Window {
     ///
     /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/hidpi/wm-dpichanged
     open func onDPIChanged(_ event: XEvent) {
-
+        print(event)
     }
 
     // MARK: Mouse events
@@ -382,64 +441,6 @@ open class X11Window {
     open func onKeyUp(_ event: XKeyReleasedEvent) -> EventResult? {
         return nil
     }
-
-    /// > Posted to the window with the keyboard focus when the user presses the
-    /// > F10 key (which activates the menu bar) or holds down the ALT key and
-    /// > then presses another key.
-    ///
-    /// > It also occurs when no window currently has
-    /// > the keyboard focus; in this case, the WM_SYSKEYDOWN message is sent to
-    /// > the active window. The window that receives the message can distinguish
-    /// > between these two contexts by checking the context code in the lParam
-    /// > parameter.
-    ///
-    /// Return a non-nil value to prevent the window from sending the message to
-    /// `DefSubclassProc` or `DefWindowProc`.
-    ///
-    /// From Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-syskeydown
-    open func onSystemKeyDown(_ event: XKeyPressedEvent) -> EventResult? {
-        return nil
-    }
-
-    /// "Posted to the window with the keyboard focus when the user releases a
-    /// key that was pressed while the ALT key was held down."
-    ///
-    /// "It also occurs when no window currently has the keyboard focus; in this
-    /// case, the WM_SYSKEYUP message is sent to the active window. The window
-    /// that receives the message can distinguish between these two contexts by
-    /// checking the context code in the lParam parameter."
-    ///
-    /// Return a non-nil value to prevent the window from sending the message to
-    /// `DefSubclassProc` or `DefWindowProc`.
-    ///
-    /// From Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/inputdev/wm-syskeyup
-    open func onSystemKeyUp(_ event: XKeyReleasedEvent) -> EventResult? {
-        return nil
-    }
-
-    /// Called when the user presses a keyboard key while this window has focus.
-    open func onKeyCharDown(_ event: XKeyPressedEvent) -> EventResult? {
-        return nil
-    }
-
-    /// Called when the user presses a keyboard key of a representable character
-    /// while this window has focus.
-    open func onKeyChar(_ event: XKeyPressedEvent) -> EventResult? {
-        return nil
-    }
-
-    /// Called when the user presses a keyboard key of a representable "dead"
-    /// character while this window has focus.
-    ///
-    /// > A dead key is a key that generates a character, such as the umlaut
-    /// > (double-dot), that is combined with another character to form a composite
-    /// > character. For example, the umlaut-O character ( ) is generated by typing
-    /// > the dead key for the umlaut character, and then typing the O key.
-    ///
-    /// - Win32 API documentation
-    open func onKeyDeadChar(_ event: XKeyPressedEvent) -> EventResult? {
-        return nil
-    }
 }
 
 internal extension X11Window {
@@ -506,6 +507,116 @@ internal extension X11Window {
 
             default:
                 return nil
+        }
+    }
+}
+
+private enum _XEventType: Int32 {
+    case KeyPress = 2
+    case KeyRelease = 3
+    case ButtonPress = 4
+    case ButtonRelease = 5
+    case MotionNotify = 6
+    case EnterNotify = 7
+    case LeaveNotify = 8
+    case FocusIn = 9
+    case FocusOut = 10
+    case KeymapNotify = 11
+    case Expose = 12
+    case GraphicsExpose = 13
+    case NoExpose = 14
+    case VisibilityNotify = 15
+    case CreateNotify = 16
+    case DestroyNotify = 17
+    case UnmapNotify = 18
+    case MapNotify = 19
+    case MapRequest = 20
+    case ReparentNotify = 21
+    case ConfigureNotify = 22
+    case ConfigureRequest = 23
+    case GravityNotify = 24
+    case ResizeRequest = 25
+    case CirculateNotify = 26
+    case CirculateRequest = 27
+    case PropertyNotify = 28
+    case SelectionClear = 29
+    case SelectionRequest = 30
+    case SelectionNotify = 31
+    case ColormapNotify = 32
+    case ClientMessage = 33
+    case MappingNotify = 34
+    case GenericEvent = 35
+
+    var description: String {
+        switch self {
+        case .KeyPress:
+            return "KeyPress"
+        case .KeyRelease:
+            return "KeyRelease"
+        case .ButtonPress:
+            return "ButtonPress"
+        case .ButtonRelease:
+            return "ButtonRelease"
+        case .MotionNotify:
+            return "MotionNotify"
+        case .EnterNotify:
+            return "EnterNotify"
+        case .LeaveNotify:
+            return "LeaveNotify"
+        case .FocusIn:
+            return "FocusIn"
+        case .FocusOut:
+            return "FocusOut"
+        case .KeymapNotify:
+            return "KeymapNotify"
+        case .Expose:
+            return "Expose"
+        case .GraphicsExpose:
+            return "GraphicsExpose"
+        case .NoExpose:
+            return "NoExpose"
+        case .VisibilityNotify:
+            return "VisibilityNotify"
+        case .CreateNotify:
+            return "CreateNotify"
+        case .DestroyNotify:
+            return "DestroyNotify"
+        case .UnmapNotify:
+            return "UnmapNotify"
+        case .MapNotify:
+            return "MapNotify"
+        case .MapRequest:
+            return "MapRequest"
+        case .ReparentNotify:
+            return "ReparentNotify"
+        case .ConfigureNotify:
+            return "ConfigureNotify"
+        case .ConfigureRequest:
+            return "ConfigureRequest"
+        case .GravityNotify:
+            return "GravityNotify"
+        case .ResizeRequest:
+            return "ResizeRequest"
+        case .CirculateNotify:
+            return "CirculateNotify"
+        case .CirculateRequest:
+            return "CirculateRequest"
+        case .PropertyNotify:
+            return "PropertyNotify"
+        case .SelectionClear:
+            return "SelectionClear"
+        case .SelectionRequest:
+            return "SelectionRequest"
+        case .SelectionNotify:
+            return "SelectionNotify"
+        case .ColormapNotify:
+            return "ColormapNotify"
+        case .ClientMessage:
+            return "ClientMessage"
+        case .MappingNotify:
+            return "MappingNotify"
+        case .GenericEvent:
+            return "GenericEvent"
         }
     }
 }
