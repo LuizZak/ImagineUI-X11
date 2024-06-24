@@ -1,4 +1,7 @@
+import Foundation
 import CX11
+
+#if false
 
 // Tentative DPI derivation code based on:
 // https://stackoverflow.com/a/70827735
@@ -34,3 +37,39 @@ func displayScaling(
 
     return (xScale + yScale) / 2
 }
+
+#else
+
+// Tentative DPI derivation code based on:
+// https://github.com/glfw/glfw/issues/1019#issuecomment-302772498
+
+/// Returns scaling of the given display, in dots-per-inch (DPI).
+func displayScaling(_ display: UnsafeMutablePointer<Display>?) -> Double {
+    let screen = XDefaultScreen(display)
+
+    return displayScaling(display, screen: Int(screen))
+}
+
+/// Returns scaling of the given display, in dots-per-inch (DPI).
+func displayScaling(
+    _ display: UnsafeMutablePointer<Display>?,
+    screen: Int
+) -> Double {
+
+    XrmInitialize()
+
+    var dpi: Double = 92.0
+    if let resourceString = XResourceManagerString(display) {
+        let db = XrmGetStringDatabase(resourceString)
+
+        var type: UnsafeMutablePointer<CChar>?
+        var value: XrmValue = .init()
+        if XrmGetResource(db, "Xft.dpi", "String", &type, &value) == True {
+            dpi = atof(value.addr)
+        }
+    }
+
+    return dpi
+}
+
+#endif

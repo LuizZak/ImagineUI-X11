@@ -100,6 +100,9 @@ open class X11Window {
         // And the current root window on that screen
         let rootWindow = XRootWindowOfScreen(screen)
 
+        // Pre-scale window size
+        let dpiScale = displayScaling(display) / 92.0
+
         // Create our window
         var visualInfo: XVisualInfo = .init()
         let result = XMatchVisualInfo(
@@ -119,10 +122,13 @@ open class X11Window {
         attr.border_pixel = 0
         attr.background_pixel = 0xFFFFFFFF
 
+        let scaledWidth = Double(settings.size.width) * dpiScale
+        let scaledHeight = Double(settings.size.height) * dpiScale
+
         window = XCreateWindow(
             display,
             rootWindow,
-            10, 10, UInt32(settings.size.width), UInt32(settings.size.height),
+            0, 0, UInt32(scaledWidth), UInt32(scaledHeight),
             1,
             visualInfo.depth,
             UInt32(InputOutput),
@@ -181,6 +187,14 @@ open class X11Window {
             window,
             eventsMask
         )
+    }
+
+    public func setWindowAttributes(
+        _ attributes: XSetWindowAttributes,
+        valueMask: some FixedWidthInteger
+    ) {
+        var attributes = attributes
+        XChangeWindowAttributes(display, window, UInt(truncatingIfNeeded: valueMask), &attributes)
     }
 
     // MARK: Display
@@ -324,11 +338,7 @@ open class X11Window {
     ///
     /// Win32 API reference: https://docs.microsoft.com/en-us/windows/win32/gdi/wm-paint
     open func onPaint(_ event: XExposeEvent) {
-        if !needsDisplay {
-            return
-        }
-
-
+        needsDisplay = false
     }
 
     /// Called when the window has received a `ConfigureNotify` event.

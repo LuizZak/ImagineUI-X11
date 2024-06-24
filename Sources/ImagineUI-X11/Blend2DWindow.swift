@@ -9,6 +9,7 @@ public class Blend2DWindow: X11Window {
     private var buffer: Blend2DX11DoubleBuffer?
     private var backBuffer: XdbeBackBuffer?
     private var gc: GC?
+    private var isMouseHidden = false
 
     /// Returns the computed size for `content`, based on the window's scale
     /// divided by `dpiScalingFactor`.
@@ -198,6 +199,11 @@ public class Blend2DWindow: X11Window {
         defer {
             let event = makeMouseEventArgs(event, kind: .other)
             content.mouseMoved(event: event)
+        }
+
+        if isMouseHidden {
+            XFixesShowCursor(display, window)
+            isMouseHidden = false
         }
 
         return super.onMouseMove(event)
@@ -440,30 +446,29 @@ extension Blend2DWindow: ImagineUIContentDelegate {
         cursor: MouseCursorKind
     ) {
 
-        /* TODO: Implement cursor change
-        var hCursor: HCURSOR?
+        var xCursor: Cursor?
 
         switch cursor {
         case .arrow:
-            hCursor = LoadCursorW(nil, IDC_ARROW)
+            xCursor = XCreateFontCursor(display, UInt32(XC_arrow))
 
         case .iBeam:
-            hCursor = LoadCursorW(nil, IDC_IBEAM)
+            xCursor = XCreateFontCursor(display, UInt32(XC_xterm))
 
         case .resizeUpDown:
-            hCursor = LoadCursorW(nil, IDC_SIZENS)
+            xCursor = XCreateFontCursor(display, UInt32(XC_sb_v_double_arrow))
 
         case .resizeLeftRight:
-            hCursor = LoadCursorW(nil, IDC_SIZEWE)
+            xCursor = XCreateFontCursor(display, UInt32(XC_sb_h_double_arrow))
 
         case .resizeTopLeftBottomRight:
-            hCursor = LoadCursorW(nil, IDC_SIZENWSE)
+            xCursor = XCreateFontCursor(display, UInt32(XC_top_left_corner))
 
         case .resizeTopRightBottomLeft:
-            hCursor = LoadCursorW(nil, IDC_SIZENESW)
+            xCursor = XCreateFontCursor(display, UInt32(XC_top_right_corner))
 
         case .resizeAll:
-            hCursor = LoadCursorW(nil, IDC_SIZEALL)
+            xCursor = XCreateFontCursor(display, UInt32(XC_fleur))
 
         case .custom(let imagePath, let hotspot):
             // TODO: Implement custom cursor
@@ -471,15 +476,17 @@ extension Blend2DWindow: ImagineUIContentDelegate {
             break
         }
 
-        if let hCursor = hCursor {
-            SetCursor(hCursor)
-            SetClassLongPtrW(hwnd, GCLP_HCURSOR, hCursorToLONG_PTR(hCursor))
+        if let xCursor = xCursor {
+            XDefineCursor(display, window, xCursor)
         }
-        */
     }
 
     public func setMouseHiddenUntilMouseMoves(_ content: ImagineUIContentType) {
-        // TODO: Implement cursor hiding
+        if !isMouseHidden {
+            XFixesHideCursor(display, window)
+        }
+
+        isMouseHidden = true
     }
 
     public func firstResponderChanged(
