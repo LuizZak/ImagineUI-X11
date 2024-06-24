@@ -476,7 +476,6 @@ extension Blend2DWindow: ImagineUIContentDelegate {
 
         case .custom(let imagePath, let hotspot):
             // TODO: Implement custom cursor
-
             break
         }
 
@@ -499,7 +498,6 @@ extension Blend2DWindow: ImagineUIContentDelegate {
     ) {
 
         if newFirstResponder != nil {
-            //SetFocus(hwnd)
             XSetICFocus(xic)
         }
     }
