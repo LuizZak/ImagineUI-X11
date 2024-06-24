@@ -410,14 +410,18 @@ public class Blend2DWindow: X11Window {
 extension Blend2DWindow: X11KeyboardManagerDelegate {
     public func keyboardManager(
         _ manager: X11KeyboardManager,
-        onKeyRelease event: X11KeyEventArgs
+        onKeyPress event: X11KeyEventArgs
     ) {
-        content.keyDown(event: event.asKeyEventArgs)
+        if let keyPress = event.asKeyPressEventArgs {
+            content.keyPress(event: keyPress)
+        } else {
+            content.keyDown(event: event.asKeyEventArgs)
+        }
     }
 
     public func keyboardManager(
         _ manager: X11KeyboardManager,
-        onKeyPress event: X11KeyEventArgs
+        onKeyRelease event: X11KeyEventArgs
     ) {
         content.keyUp(event: event.asKeyEventArgs)
     }
