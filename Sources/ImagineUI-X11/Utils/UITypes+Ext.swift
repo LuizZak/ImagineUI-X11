@@ -7,9 +7,14 @@ import Blend2DRenderer
 extension UIRectangle {
     @_transparent
     var asRect: Rect {
-        let origin = Point(x: Int(self.x), y: Int(self.y))
-        let size = Size(width: Int(self.width),
-                        height: Int(self.height))
+        let origin = Point(
+            x: Int(self.x.rounded(.towardZero)),
+            y: Int(self.y.rounded(.towardZero))
+        )
+        let size = Size(
+            width: Int(self.width.rounded(.awayFromZero)),
+            height: Int(self.height.rounded(.awayFromZero))
+        )
 
         return .init(origin: origin, size: size)
     }
@@ -36,6 +41,13 @@ extension UIIntSize {
     @_transparent
     var asBLSizeI: BLSizeI {
         BLSizeI(w: Int32(width), h: Int32(height))
+    }
+}
+
+extension Point {
+    @_transparent
+    var asUIPoint: UIPoint {
+        UIPoint(x: Double(x), y: Double(y))
     }
 }
 
@@ -68,5 +80,12 @@ extension Size {
     @_transparent
     var asBLSizeI: BLSizeI {
         .init(w: Int32(width), h: Int32(height))
+    }
+}
+
+extension Rect {
+    @_transparent
+    var asUIRectangle: UIRectangle {
+        UIRectangle(location: origin.asUIPoint, size: size.asUISize)
     }
 }

@@ -42,15 +42,15 @@ public class X11EventLoop {
                 // timers, sources and Dispatch.DispatchQueue.main tasks
                 limitDate = RunLoop.main.limitDate(forMode: .default)
 
+                // Ensure windows are properly invalidated
+                for window in X11Window.openWindows {
+                    window.flushRedisplayAreas()
+                }
+
                 // If Foundation.RunLoop doesn't contain any timers or the timers
                 // should not be running right now, we interrupt the current loop
                 // or otherwise continue to the next iteration.
             } while (limitDate?.timeIntervalSinceNow ?? -1) <= 0
-
-            // Ensure windows are properly invalidated
-            for window in X11Window.openWindows {
-                window.flushRedisplayAreas()
-            }
         }
     }
 

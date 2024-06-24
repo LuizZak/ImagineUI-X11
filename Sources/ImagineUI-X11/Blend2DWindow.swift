@@ -7,7 +7,6 @@ import ImagineUI
 public class Blend2DWindow: X11Window {
     private var keyboardManager: X11KeyboardManager?
     private var buffer: Blend2DX11DoubleBuffer?
-    private var backBuffer: XdbeBackBuffer?
     private var gc: GC?
     private var isMouseHidden = false
 
@@ -42,8 +41,6 @@ public class Blend2DWindow: X11Window {
         self.content = content
 
         super.init(settings: settings)
-
-        self.backBuffer = XdbeAllocateBackBufferName(display, window, 0)
     }
 
     public override func initialize() {
@@ -139,9 +136,14 @@ public class Blend2DWindow: X11Window {
         guard needsDisplay else {
             return
         }
-        defer { clearNeedsDisplay() }
+        defer {
+            // Only clear needsDisplay flag when last expose event is received.
+            if event.count == 0 {
+                clearNeedsDisplay()
+            }
+        }
 
-        guard let buffer, let backBuffer else {
+        guard let buffer else {
             return
         }
 
@@ -156,15 +158,15 @@ public class Blend2DWindow: X11Window {
             paintImmediateBuffer(image: buffer, scale: scale, rect: uiRect)
         }
 
-        let drawTarget = backBuffer
+        let drawTarget = window
 
         buffer.renderBufferToScreen(display, drawTarget, gc, rect: uiRect, renderingThreads: 4)
+    }
 
-        var swapInfo = XdbeSwapInfo(
-            swap_window: window,
-            swap_action: XdbeSwapAction(XdbeCopied)
-        )
-        XdbeSwapBuffers(display, &swapInfo, 1)
+    public override func coalescedRedrawRegion(_ rects: [Rect]) -> [Rect] {
+        let region = UIRegion(rectangles: rects.map(\.asUIRectangle))
+
+        return region.allRectangles().map({ $0.inflatedBy(x: 5, y: 5) }).map(\.asRect)
     }
 
     private func paintImmediateBuffer(image: BLImage, scale: UIVector, rect: UIRectangle) {

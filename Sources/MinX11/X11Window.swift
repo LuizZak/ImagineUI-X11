@@ -87,7 +87,7 @@ open class X11Window {
     public let visualInfo: XVisualInfo
 
     public init(settings: CreationSettings) {
-        self.size = settings.size
+        self.size = .init(width: settings.size.width, height: settings.size.height)
 
         display = settings.display
 
@@ -99,9 +99,6 @@ open class X11Window {
 
         // And the current root window on that screen
         let rootWindow = XRootWindowOfScreen(screen)
-
-        // Pre-scale window size
-        let dpiScale = displayScaling(display) / 92.0
 
         // Create our window
         var visualInfo: XVisualInfo = .init()
@@ -122,6 +119,8 @@ open class X11Window {
         attr.border_pixel = 0
         attr.background_pixel = 0xFFFFFFFF
 
+        // Pre-scale window size
+        let dpiScale = displayScaling(settings.display) / 92.0
         let scaledWidth = Double(settings.size.width) * dpiScale
         let scaledHeight = Double(settings.size.height) * dpiScale
 
@@ -260,18 +259,27 @@ open class X11Window {
         flushRedisplayAreas()
     }
 
+    /// Performs coalescing of redraw region rectangles, by merging/splitting/union
+    /// of a given input set of rectangles.
+    open func coalescedRedrawRegion(_ rects: [Rect]) -> [Rect] {
+        guard let first = rects.first else { return [] }
+
+        let merged = rects.reduce(first) { $0.union($1) }
+        return [merged]
+    }
+
     /// Flushes all entries of `setNeedsDisplay()` calls made so far into a sequence
     /// of underlying OS messages to be handled on a subsequent draw event operation
     /// on this window.
     func flushRedisplayAreas() {
-        guard !self.isDestroyed, let first = _redisplayAreas.first else { return }
-        defer { _redisplayAreas.removeAll() }
+        guard !self.isDestroyed else { return }
+        guard !_redisplayAreas.isEmpty else { return }
 
-        let merged = _redisplayAreas.reduce(first) { $0.union($1) }
-        _redisplayAreas = [merged]
+        let areas = coalescedRedrawRegion(_redisplayAreas)
+        _redisplayAreas.removeAll()
 
-        for (i, rect) in _redisplayAreas.enumerated() {
-            let remaining = _redisplayAreas.count - i - 1
+        for (i, rect) in areas.enumerated() {
+            let remaining = areas.count - i - 1
 #if true
             var event: XExposeEvent = .init()
             event.window = window
@@ -286,6 +294,8 @@ open class X11Window {
             // Clamp coordinates
             event.x = max(0, event.x)
             event.y = max(0, event.y)
+            event.width = min(Int32(size.width), event.width)
+            event.height = min(Int32(size.height), event.height)
 
             var xEvent = XEvent(xexpose: event)
             XSendEvent(
@@ -338,7 +348,7 @@ open class X11Window {
     ///
     /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#Expose_Events
     open func onPaint(_ event: XExposeEvent) {
-        needsDisplay = false
+        clearNeedsDisplay()
     }
 
     /// Called when the window has received a `ConfigureNotify` event.
