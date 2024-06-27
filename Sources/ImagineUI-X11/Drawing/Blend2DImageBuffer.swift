@@ -2,17 +2,18 @@ import Foundation
 import CX11
 import SwiftBlend2D
 
-private let useXShm = false
-
 class Blend2DImageBuffer {
     private let _display: UnsafeMutablePointer<Display>
     private let _shmInfo: UnsafeMutablePointer<XShmSegmentInfo>?
+    private let _imageRectangle: UIRectangle
+    private let useXShm: Bool
 
     let image: UnsafeMutablePointer<XImage>
     let buffer: UnsafeMutablePointer<CChar>
     let blImage: BLImage
 
     init(
+        useXShm: Bool = true,
         size: BLSizeI,
         display: UnsafeMutablePointer<Display>,
         vinfo: XVisualInfo?
@@ -23,15 +24,13 @@ class Blend2DImageBuffer {
 
         let bpp = 4
         let depth: Int32 = 32
-        let stride = bpp * Int(size.w)
+
+        _imageRectangle = BLRectI(location: .zero, size: size).asRectangle
+
+        self.useXShm = useXShm
 
         if useXShm {
             let shmInfo: UnsafeMutablePointer<XShmSegmentInfo> = .allocate(capacity: 1)
-            var _shmInfo: XShmSegmentInfo {
-                get { shmInfo.pointee }
-                set { shmInfo.pointee = newValue }
-            }
-            _shmInfo = .init()
 
             image = XShmCreateImage(
                 display,
@@ -45,25 +44,28 @@ class Blend2DImageBuffer {
             )
 
             let allocSize = Int(image.pointee.bytes_per_line * image.pointee.height)
-            _shmInfo.shmid = shmget(IPC_PRIVATE, allocSize, IPC_CREAT | 0o777)
-            if _shmInfo.shmid == -1 {
+            shmInfo.pointee.shmid = shmget(IPC_PRIVATE, allocSize, IPC_CREAT | 0o777)
+            if shmInfo.pointee.shmid == -1 {
                 fatalError("Error trying to create image with Xlib shared memory extension.")
             }
 
-            _shmInfo.shmaddr = shmat(_shmInfo.shmid, nil, 0)?.assumingMemoryBound(to: CChar.self)
-            if _shmInfo.shmaddr == nil {
+            shmInfo.pointee.shmaddr = shmat(shmInfo.pointee.shmid, nil, 0)?.assumingMemoryBound(to: CChar.self)
+            if shmInfo.pointee.shmaddr == .init(bitPattern: -1) {
                 fatalError("Error trying to create image with Xlib shared memory extension.")
             }
 
-            image.pointee.data = _shmInfo.shmaddr
-            buffer = _shmInfo.shmaddr
-            _shmInfo.readOnly = 0
+            image.pointee.data = shmInfo.pointee.shmaddr
+            buffer = shmInfo.pointee.shmaddr
+            shmInfo.pointee.readOnly = True
 
-            XShmAttach(display, shmInfo)
+            if XShmAttach(display, shmInfo) == 0 {
+                fatalError("Failed to create image with Xlib shared memory extension.")
+            }
 
+            let stride = image.pointee.bytes_per_line
             blImage = BLImage(
-                fromUnownedData: _shmInfo.shmaddr,
-                stride: stride,
+                fromUnownedData: shmInfo.pointee.shmaddr,
+                stride: Int(stride),
                 width: Int(size.w),
                 height: Int(size.h),
                 format: .xrgb32
@@ -73,6 +75,7 @@ class Blend2DImageBuffer {
         } else {
             self._shmInfo = nil
 
+            let stride = bpp * Int(size.w)
             let bufferLength = Int(size.w * size.h) * bpp
             buffer = .allocate(capacity: bufferLength)
 
@@ -100,12 +103,26 @@ class Blend2DImageBuffer {
     }
 
     deinit {
-        buffer.deallocate()
-
         if let _shmInfo {
-            XShmDetach(_display, _shmInfo)
-            shmdt(_shmInfo.pointee.shmaddr)
-            shmctl(_shmInfo.pointee.shmid, IPC_RMID, nil)
+            if XShmDetach(_display, _shmInfo) == 0 {
+                fatalError("Error detaching from Xlib shared memory segment.")
+            }
+
+            // Ensure server detaches before proceeding
+            XSync(_display, False)
+
+            XDestroyImage(image)
+
+            if shmdt(_shmInfo.pointee.shmaddr) == -1 {
+                fatalError("Error detaching from Xlib shared memory segment.")
+            }
+            if shmctl(_shmInfo.pointee.shmid, IPC_RMID, nil) == -1 {
+                fatalError("Error detaching from Xlib shared memory segment.")
+            }
+
+            _shmInfo.deallocate()
+        } else {
+            XDestroyImage(image)
         }
     }
 
@@ -115,35 +132,47 @@ class Blend2DImageBuffer {
         _ GC: GC!,
         rect: BLRectI
     ) {
-        let w = rect.right - rect.left
-        let h = rect.bottom - rect.top
+        // Ensure the rectangle is within the bounds of the image
+        guard let intersection = _imageRectangle.intersection(rect.asRectangle) else {
+            return
+        }
 
-        if useXShm {
+        let properRect = BLRectI(rounding: intersection.asBLRect)
+
+        if self.useXShm {
             XShmPutImage(
                 display,
                 drawable,
                 GC,
                 image,
-                rect.x,
-                rect.y,
-                rect.x,
-                rect.y,
-                UInt32(w),
-                UInt32(h),
+                properRect.x,
+                properRect.y,
+                properRect.x,
+                properRect.y,
+                UInt32(properRect.w),
+                UInt32(properRect.h),
                 1
             )
+
+            // We have to wait until the server finishes rendering the image first
+            XFlush(display)
+            var eventType = XShmGetEventBase(display) + ShmCompletion
+            var event: XEvent = .init()
+            XIfEvent(display, &event, { (display, event, data) in
+                return event!.pointee.type == data!.pointee ? True : False
+            }, &eventType)
         } else {
             XPutImage(
                 display,
                 drawable,
                 GC,
                 image,
-                rect.x,
-                rect.y,
-                rect.x,
-                rect.y,
-                UInt32(w),
-                UInt32(h)
+                properRect.x,
+                properRect.y,
+                properRect.x,
+                properRect.y,
+                UInt32(properRect.w),
+                UInt32(properRect.h)
             )
         }
     }

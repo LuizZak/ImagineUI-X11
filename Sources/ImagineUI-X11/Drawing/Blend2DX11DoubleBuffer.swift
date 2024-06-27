@@ -6,6 +6,7 @@ class Blend2DX11DoubleBuffer {
     private(set) internal var contentSize: BLSizeI
     private var scale: UIVector
     private let format: BLFormat
+    private let useXShm: Bool
 
     private var buffer: BufferKind
 
@@ -15,6 +16,7 @@ class Blend2DX11DoubleBuffer {
         format: BLFormat,
         display: UnsafeMutablePointer<Display>,
         vinfo: XVisualInfo?,
+        useXShm: Bool,
         scale: UIVector = .init(repeating: 1)
     ) {
 
@@ -22,7 +24,9 @@ class Blend2DX11DoubleBuffer {
         self.contentSize = contentSize
         self.scale = scale
         self.format = format
+        self.useXShm = useXShm
         self.buffer = .makeBuffer(
+            useXShm: useXShm,
             size: contentSize,
             format: format,
             scale: scale,
@@ -47,6 +51,7 @@ class Blend2DX11DoubleBuffer {
         guard contentSize != primary || self.scale != scale else { return }
 
         buffer = .makeBuffer(
+            useXShm: useXShm,
             size: primary,
             format: format,
             scale: scale,
@@ -150,6 +155,7 @@ private enum BufferKind {
     }
 
     static func makeBuffer(
+        useXShm: Bool,
         size: BLSizeI,
         format: BLFormat,
         scale: UIVector,
@@ -157,7 +163,12 @@ private enum BufferKind {
         vinfo: XVisualInfo?
     ) -> Self {
 
-        let secondary = Blend2DImageBuffer(size: size, display: display, vinfo: vinfo)
+        let secondary = Blend2DImageBuffer(
+            useXShm: useXShm,
+            size: size,
+            display: display,
+            vinfo: vinfo
+        )
 
         if scale == 1.0 {
             return .singleBuffer(secondary)

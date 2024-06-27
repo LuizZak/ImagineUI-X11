@@ -7,6 +7,7 @@ import ImagineUI
 public class Blend2DWindow: X11Window {
     private var keyboardManager: X11KeyboardManager?
     private var buffer: Blend2DX11DoubleBuffer?
+    private var x11BackBuffer: XdbeBackBuffer?
     private var gc: GC?
     private var isMouseHidden = false
 
@@ -25,6 +26,30 @@ public class Blend2DWindow: X11Window {
     /// Number of rendering threads to use in Blend2D during rendering.
     /// A value of 0 specifies synchronous rendering with no threading.
     public var renderingThreads: UInt32 = 0
+
+    /// If `true`, attempts to use X11's shared memory extension for rendering
+    /// the back-buffer to the screen.
+    ///
+    /// Defaults to `true`.
+    public var useXShm: Bool = true {
+        didSet {
+            guard useXShm != oldValue else { return }
+
+            recreateBuffers()
+        }
+    }
+
+    /// If `true`, uses X11's double-buffering extension for rendering the
+    /// back-buffer to the screen.
+    ///
+    /// Defaults to `true`.
+    public var useDoubleBuffer: Bool = true {
+        didSet {
+            guard useDoubleBuffer != oldValue else { return }
+
+            recreateBuffers()
+        }
+    }
 
     /// Rate of update calls per second.
     /// Affects how much the content.update() function is called each second.
@@ -77,23 +102,25 @@ public class Blend2DWindow: X11Window {
             return
         }
 
-        if let gc {
-            XFreeGC(display, gc)
+        if gc == nil {
+            gc = XCreateGC(display, window, 0, nil)
+
+            var color: XColor = .init()
+            color.red = 32000
+            color.flags = CChar(truncatingIfNeeded: DoRed)
+            XAllocColor(display, colorMap, &color)
+            XSetForeground(display, gc, color.pixel)
         }
-
-        gc = XCreateGC(display, window, 0, nil)
-
-        var color: XColor = .init()
-        color.red = 32000
-        color.flags = CChar(truncatingIfNeeded: DoRed)
-        XAllocColor(display, colorMap, &color)
-        XSetForeground(display, gc, color.pixel)
+        if useDoubleBuffer && x11BackBuffer == nil {
+            x11BackBuffer = XdbeAllocateBackBufferName(display, window, XdbeSwapAction(XdbeCopied))
+        }
 
         buffer = .init(
             contentSize: contentSize.asBLSizeI,
             format: .xrgb32,
             display: display,
             vinfo: visualInfo,
+            useXShm: useXShm,
             scale: content.preferredRenderScale
         )
 
@@ -140,9 +167,10 @@ public class Blend2DWindow: X11Window {
         guard needsDisplay else {
             return
         }
+        let isLastRedraw = event.count == 0
         defer {
             // Only clear needsDisplay flag when last expose event is received.
-            if event.count == 0 {
+            if isLastRedraw {
                 clearNeedsDisplay()
             }
         }
@@ -154,16 +182,6 @@ public class Blend2DWindow: X11Window {
             height: Double(event.height)
         )
 
-        _internalRedraw(uiRect: uiRect)
-    }
-
-    public override func coalescedRedrawRegion(_ rects: [Rect]) -> [Rect] {
-        let region = UIRegion(rectangles: rects.map(\.asUIRectangle))
-
-        return region.allRectangles().map({ $0.inflatedBy(x: 5, y: 5) }).map(\.asRect)
-    }
-
-    private func _internalRedraw(uiRect: UIRectangle) {
         guard let buffer else {
             return
         }
@@ -172,9 +190,30 @@ public class Blend2DWindow: X11Window {
             paintImmediateBuffer(image: buffer, scale: scale, rect: uiRect)
         }
 
-        let drawTarget = window
+        let drawTarget: Drawable
+        if useDoubleBuffer, let x11BackBuffer {
+            drawTarget = x11BackBuffer
+        } else {
+            drawTarget = window
+        }
 
         buffer.renderBufferToScreen(display, drawTarget, gc, rect: uiRect, renderingThreads: 4)
+
+        if isLastRedraw && useDoubleBuffer, x11BackBuffer != nil {
+            var swapInfo = XdbeSwapInfo(
+                swap_window: window,
+                swap_action: XdbeSwapAction(XdbeUndefined)
+            )
+
+            XdbeSwapBuffers(display, &swapInfo, 1)
+        }
+    }
+
+    public override func coalescedRedrawRegion(_ rects: [Rect]) -> [Rect] {
+        let region = UIRegion(rectangles: rects.map(\.asUIRectangle))
+        region.unionNeighboring(tolerance: 1)
+
+        return region.allRectangles().map({ $0.inflatedBy(x: 5, y: 5) }).map(\.asRect)
     }
 
     private func paintImmediateBuffer(image: BLImage, scale: UIVector, rect: UIRectangle) {
