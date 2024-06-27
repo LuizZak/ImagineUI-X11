@@ -49,8 +49,6 @@ public class Blend2DWindow: X11Window {
         initializeClipboard()
         initializeKeyboardManager()
         initializeContent()
-
-        recreateBuffers()
     }
 
     private func initializeKeyboardManager() {
@@ -70,8 +68,6 @@ public class Blend2DWindow: X11Window {
         content.resize(scaledContentSize)
 
         recreateBuffers()
-
-        setNeedsDisplay()
     }
 
     private func recreateBuffers() {
@@ -100,6 +96,8 @@ public class Blend2DWindow: X11Window {
             vinfo: visualInfo,
             scale: content.preferredRenderScale
         )
+
+        setNeedsDisplay()
     }
 
     // MARK: Events
@@ -116,12 +114,18 @@ public class Blend2DWindow: X11Window {
         resizeApp()
     }
 
-    public override func onDPIChanged(_ event: XEvent) {
+    public override func onDPIChanged(_ event: XConfigureEvent) {
         super.onDPIChanged(event)
 
         resizeApp()
 
         X11Logger.info("DPI for window changed: \(dpi), new sizes: contentSize: \(contentSize), scaledContentSize: \(scaledContentSize)")
+    }
+
+    public override func onCreate(_ event: XConfigureEvent) {
+        super.onCreate(event)
+
+        resizeApp()
     }
 
     public override func onClose(_ event: XDestroyWindowEvent) {
@@ -143,16 +147,26 @@ public class Blend2DWindow: X11Window {
             }
         }
 
-        guard let buffer else {
-            return
-        }
-
         let uiRect = UIRectangle(
             x: Double(event.x),
             y: Double(event.y),
             width: Double(event.width),
             height: Double(event.height)
         )
+
+        _internalRedraw(uiRect: uiRect)
+    }
+
+    public override func coalescedRedrawRegion(_ rects: [Rect]) -> [Rect] {
+        let region = UIRegion(rectangles: rects.map(\.asUIRectangle))
+
+        return region.allRectangles().map({ $0.inflatedBy(x: 5, y: 5) }).map(\.asRect)
+    }
+
+    private func _internalRedraw(uiRect: UIRectangle) {
+        guard let buffer else {
+            return
+        }
 
         buffer.renderingToBuffer { (buffer, scale) in
             paintImmediateBuffer(image: buffer, scale: scale, rect: uiRect)
@@ -161,12 +175,6 @@ public class Blend2DWindow: X11Window {
         let drawTarget = window
 
         buffer.renderBufferToScreen(display, drawTarget, gc, rect: uiRect, renderingThreads: 4)
-    }
-
-    public override func coalescedRedrawRegion(_ rects: [Rect]) -> [Rect] {
-        let region = UIRegion(rectangles: rects.map(\.asUIRectangle))
-
-        return region.allRectangles().map({ $0.inflatedBy(x: 5, y: 5) }).map(\.asRect)
     }
 
     private func paintImmediateBuffer(image: BLImage, scale: UIVector, rect: UIRectangle) {
@@ -511,7 +519,6 @@ extension Blend2DWindow: ImagineUIContentDelegate {
     ) {
 
         recreateBuffers()
-        setNeedsDisplay()
     }
 
     public func windowDpiScalingFactor(_ content: ImagineUIContentType) -> Double {

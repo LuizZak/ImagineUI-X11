@@ -46,7 +46,7 @@ class Blend2DX11DoubleBuffer {
     ) {
         guard contentSize != primary || self.scale != scale else { return }
 
-        self.buffer = .makeBuffer(
+        buffer = .makeBuffer(
             size: primary,
             format: format,
             scale: scale,
@@ -66,7 +66,7 @@ class Blend2DX11DoubleBuffer {
         rect: UIRectangle?,
         renderingThreads: UInt32
     ) {
-        self.renderBufferToScreen(
+        renderBufferToScreen(
             display,
             drawable,
             GC,
@@ -91,22 +91,7 @@ class Blend2DX11DoubleBuffer {
         )
 
         buffer.pushPixelsToScreenBuffer(rect: rect, renderingThreads: renderingThreads)
-
-        let w = rect.right - rect.left
-        let h = rect.bottom - rect.top
-
-        XPutImage(
-            display,
-            drawable,
-            GC,
-            buffer.screenBuffer.image,
-            rect.x,
-            rect.y,
-            rect.x,
-            rect.y,
-            UInt32(w),
-            UInt32(h)
-        )
+        buffer.pushPixelsToScreen(display, drawable, GC, rect: rect)
     }
 }
 
@@ -153,6 +138,15 @@ private enum BufferKind {
             ctx.flush(flags: .sync)
             ctx.end()
         }
+    }
+
+    func pushPixelsToScreen(
+        _ display: UnsafeMutablePointer<Display>!,
+        _ drawable: Drawable,
+        _ GC: GC!,
+        rect: BLRectI
+    ) {
+        screenBuffer.pushPixelsToScreen(display, drawable, GC, rect: rect)
     }
 
     static func makeBuffer(

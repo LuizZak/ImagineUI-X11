@@ -23,11 +23,14 @@ open class X11Window {
     }
 
     private var _redisplayAreas: [Rect] = []
+    private var _state: XWindowState = .pending
 
     private let minSize: Size = Size(width: 200, height: 150)
 
-    /// Set to `true` when a `WM_DESTROY` message has been received.
-    private var isDestroyed: Bool = false
+    /// Set to `true` when a `DestroyNotify` event has been received.
+    private var isDestroyed: Bool {
+        _state == .destroyed
+    }
 
     /// Whether `TrackMouseEvent` is activated for this window.
     private var isMouseTrackingOn: Bool = false
@@ -153,7 +156,7 @@ open class X11Window {
         initialize()
     }
 
-    private func onDestroy() {
+    private func _onDestroy() {
         X11Window._openWindows.withWriteAccess { openWindows in
             if let index = openWindows.firstIndex(where: { $0 === self }) {
                 openWindows.remove(at: index)
@@ -171,8 +174,8 @@ open class X11Window {
 
     open func initialize() {
         let eventsMask =
-            // Resizing events and misc.
-            StructureNotifyMask |
+            // Open/close, resizing events, and misc.
+            StructureNotifyMask | SubstructureNotifyMask |
             // Drawing
             ExposureMask |
             // Keyboard
@@ -332,13 +335,26 @@ open class X11Window {
 
     // MARK: Window events
 
+    /// Called when the window has received an initial `ConfigureNotify` event.
+    ///
+    /// Always call `super.onCreate(event)` when overriding this method.
+    ///
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#ConfigureNotify_Events
+    open func onCreate(_ event: XConfigureEvent) {
+        _state = .created
+
+        onResize(event)
+    }
+
     /// Called when the window has received a `DestroyNotify` event.
+    ///
+    /// Always call `super.onClose(event)` when overriding this method.
     ///
     /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#DestroyNotify_Events
     open func onClose(_ event: XDestroyWindowEvent) {
-        isDestroyed = true
+        _state = .destroyed
 
-        onDestroy()
+        _onDestroy()
     }
 
     /// Called when the window has received a a `ExposureNotify` event.
@@ -357,16 +373,14 @@ open class X11Window {
     open func onResize(_ event: XConfigureEvent) {
         size.width = Int(event.width)
         size.height = Int(event.height)
-
-        dpi = Int(displayScaling(display))
     }
 
     /// Called when the DPI settings for the display the window is hosted on
     /// changes.
     ///
-    /// X11 API reference: ??? (not tied to any event currently)
-    open func onDPIChanged(_ event: XEvent) {
-        print(event)
+    /// X11 API reference: https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#ConfigureNotify_Events
+    open func onDPIChanged(_ event: XConfigureEvent) {
+        dpi = Int(displayScaling(display))
     }
 
     // MARK: Mouse events
@@ -485,6 +499,19 @@ open class X11Window {
     open func onKeyUp(_ event: XKeyReleasedEvent) -> EventResult? {
         return nil
     }
+
+    /// State of the window associated with an X11Window.
+    private enum XWindowState {
+        /// Window is pending being created; a `CreateNotify` event is still
+        /// pending before the window is considered created.
+        case pending
+
+        /// The window has received a `CreateNotify` event.
+        case created
+
+        /// The window has received a `DestroyNotify` event.
+        case destroyed
+    }
 }
 
 internal extension X11Window {
@@ -545,128 +572,27 @@ internal extension X11Window {
 
             case ConfigureNotify:
                 let event = event.xconfigure
-                if event.width == size.width && event.height == size.height {
-                    return ()
+
+                if _state == .pending {
+                    return onCreate(event)
                 }
 
-                return onResize(event)
+                if event.width != size.width || event.height != size.height {
+                    return onResize(event)
+                }
+
+                let newDpi = Int(displayScaling(display))
+                if dpi != newDpi {
+                    return onDPIChanged(event)
+                }
+
+                return ()
 
             case DestroyNotify:
                 return onClose(event.xdestroywindow)
 
             default:
                 return nil
-        }
-    }
-}
-
-// Used during debugging
-private enum _XEventType: Int32 {
-    case KeyPress = 2
-    case KeyRelease = 3
-    case ButtonPress = 4
-    case ButtonRelease = 5
-    case MotionNotify = 6
-    case EnterNotify = 7
-    case LeaveNotify = 8
-    case FocusIn = 9
-    case FocusOut = 10
-    case KeymapNotify = 11
-    case Expose = 12
-    case GraphicsExpose = 13
-    case NoExpose = 14
-    case VisibilityNotify = 15
-    case CreateNotify = 16
-    case DestroyNotify = 17
-    case UnmapNotify = 18
-    case MapNotify = 19
-    case MapRequest = 20
-    case ReparentNotify = 21
-    case ConfigureNotify = 22
-    case ConfigureRequest = 23
-    case GravityNotify = 24
-    case ResizeRequest = 25
-    case CirculateNotify = 26
-    case CirculateRequest = 27
-    case PropertyNotify = 28
-    case SelectionClear = 29
-    case SelectionRequest = 30
-    case SelectionNotify = 31
-    case ColormapNotify = 32
-    case ClientMessage = 33
-    case MappingNotify = 34
-    case GenericEvent = 35
-
-    var description: String {
-        switch self {
-        case .KeyPress:
-            return "KeyPress"
-        case .KeyRelease:
-            return "KeyRelease"
-        case .ButtonPress:
-            return "ButtonPress"
-        case .ButtonRelease:
-            return "ButtonRelease"
-        case .MotionNotify:
-            return "MotionNotify"
-        case .EnterNotify:
-            return "EnterNotify"
-        case .LeaveNotify:
-            return "LeaveNotify"
-        case .FocusIn:
-            return "FocusIn"
-        case .FocusOut:
-            return "FocusOut"
-        case .KeymapNotify:
-            return "KeymapNotify"
-        case .Expose:
-            return "Expose"
-        case .GraphicsExpose:
-            return "GraphicsExpose"
-        case .NoExpose:
-            return "NoExpose"
-        case .VisibilityNotify:
-            return "VisibilityNotify"
-        case .CreateNotify:
-            return "CreateNotify"
-        case .DestroyNotify:
-            return "DestroyNotify"
-        case .UnmapNotify:
-            return "UnmapNotify"
-        case .MapNotify:
-            return "MapNotify"
-        case .MapRequest:
-            return "MapRequest"
-        case .ReparentNotify:
-            return "ReparentNotify"
-        case .ConfigureNotify:
-            return "ConfigureNotify"
-        case .ConfigureRequest:
-            return "ConfigureRequest"
-        case .GravityNotify:
-            return "GravityNotify"
-        case .ResizeRequest:
-            return "ResizeRequest"
-        case .CirculateNotify:
-            return "CirculateNotify"
-        case .CirculateRequest:
-            return "CirculateRequest"
-        case .PropertyNotify:
-            return "PropertyNotify"
-        case .SelectionClear:
-            return "SelectionClear"
-        case .SelectionRequest:
-            return "SelectionRequest"
-        case .SelectionNotify:
-            return "SelectionNotify"
-        case .ColormapNotify:
-            return "ColormapNotify"
-        case .ClientMessage:
-            return "ClientMessage"
-        case .MappingNotify:
-            return "MappingNotify"
-        case .GenericEvent:
-            return "GenericEvent"
         }
     }
 }

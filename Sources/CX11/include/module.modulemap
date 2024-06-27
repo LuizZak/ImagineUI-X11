@@ -10,6 +10,7 @@ module CX11 [system] {
     header "/usr/include/X11/Xresource.h"
     header "/usr/include/X11/extensions/Xfixes.h"
     header "/usr/include/X11/extensions/Xdbe.h"
+    header "/usr/include/X11/extensions/XShm.h"
     link "X11"
     link "Xext"
     link "Xfixes"
