@@ -246,12 +246,18 @@ open class X11Window {
             return
         }
 
-        self.needsDisplay = true
-
         // Scale the rectangle appropriately
         let rect = rect.scaled(by: dpiScalingFactor)
 
-        _redisplayAreas.append(rect)
+        // Clip the rectangle before emitting
+        let visibleArea = Rect(left: 0, top: 0, right: size.width, bottom: size.height)
+        guard let clipped = rect.intersection(visibleArea) else {
+            return
+        }
+
+        self.needsDisplay = true
+
+        _redisplayAreas.append(clipped)
     }
 
     func _performLayoutAndDisplay() {

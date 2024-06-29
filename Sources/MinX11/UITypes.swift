@@ -113,6 +113,19 @@ public struct Rect {
         return .init(left: left, top: top, right: right, bottom: bottom)
     }
 
+    func intersection(_ other: Self) -> Self? {
+        let x1 = max(left, other.left)
+        let x2 = min(right, other.right)
+        let y1 = max(top, other.top)
+        let y2 = min(bottom, other.bottom)
+
+        if x2 >= x1 && y2 >= y1 {
+            return Self(left: x1, top: y1, right: x2, bottom: y2)
+        }
+
+        return nil
+    }
+
     @_transparent
     func scaled(
         byX factorX: Double,
