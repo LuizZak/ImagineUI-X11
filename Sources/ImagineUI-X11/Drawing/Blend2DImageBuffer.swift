@@ -13,7 +13,7 @@ class Blend2DImageBuffer {
     let blImage: BLImage
 
     init(
-        useXShm: Bool = true,
+        useXShm: Bool,
         size: BLSizeI,
         display: UnsafeMutablePointer<Display>,
         vinfo: XVisualInfo?
@@ -155,7 +155,6 @@ class Blend2DImageBuffer {
             )
 
             // We have to wait until the server finishes rendering the image first
-            XFlush(display)
             var eventType = XShmGetEventBase(display) + ShmCompletion
             var event: XEvent = .init()
             XIfEvent(display, &event, { (display, event, data) in

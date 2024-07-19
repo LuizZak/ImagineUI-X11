@@ -20,7 +20,10 @@ public class ImagineUIApp {
     }
 
     /// Opens a window to show a given content.
-    public func show(content: ImagineUIContentType) {
+    public func show(
+        content: ImagineUIContentType,
+        position: X11Window.InitialPosition
+    ) {
         let settings = X11Window.CreationSettings(
             title: "ImagineUI-X11 Sample Window",
             size: content.size.asSize,
@@ -28,7 +31,7 @@ public class ImagineUIApp {
         )
         let window = Blend2DWindow(settings: settings, content: content)
 
-        window.show()
+        window.show(position: position)
     }
 
     /// Marks the program as finished executing and quits.

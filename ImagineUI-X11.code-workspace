@@ -154,6 +154,10 @@
         "cSpell.words": [
             "swiftpm"
         ],
+        "files.associations": {
+            "xdbe.h": "c",
+            "xrender.h": "c"
+        },
     },
     "extensions": {
         "recommendations": [

@@ -9,7 +9,7 @@ class SampleDelegate: ImagineUIAppDelegate {
         ControlView.globallyCacheAsBitmap = false
 
         let main = SampleWindow()
-        app.show(content: main)
+        app.show(content: main, position: .centered)
 
         self.main = main
     }

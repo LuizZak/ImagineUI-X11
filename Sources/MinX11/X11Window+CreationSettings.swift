@@ -18,4 +18,15 @@ extension X11Window {
             self.display = display
         }
     }
+
+    /// Specifies the desired initial position of an X11Window as its shown on
+    /// screen.
+    public enum InitialPosition {
+        /// Position is specified by the system, and not changed.
+        case `default`
+
+        /// Centers the window as its shown so that it occupies the center
+        /// section of the screen it is in.
+        case centered
+    }
 }

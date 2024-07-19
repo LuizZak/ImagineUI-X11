@@ -204,7 +204,7 @@ open class X11Window {
     /// Displays this window on the screen.
     ///
     /// Should not be called if the window has been closed.
-    open func show() {
+    open func show(position: InitialPosition = .default) {
         guard !isDestroyed else {
             X11Logger.warning("Called show() on a \(X11Window.self) after a XDestroyWindow (onClose()) message has been received. The window will not be shown.")
             return
@@ -218,6 +218,17 @@ open class X11Window {
 
         // Display the Window on the X11 Server
         XMapWindow(display, window)
+        XSync(display, 0)
+
+        // Re-center, depending on desired settings
+        switch position {
+        case .default:
+            break
+
+        case .centered:
+            // TODO: Respect InitialPosition.centered
+            break
+        }
     }
 
     open func setNeedsLayout() {

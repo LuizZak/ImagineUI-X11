@@ -21,6 +21,7 @@
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/Xdbe.h>
 #include <X11/extensions/XShm.h>
+#include <X11/extensions/Xrender.h>
 
 // Used to invoke 'XCreateIC' with variadic arguments from Swift
 XIC _XCreateIC(XIM xim, Window window);
