@@ -463,7 +463,9 @@ extension Blend2DWindow: X11KeyboardManagerDelegate {
         onKeyPress event: X11KeyEventArgs
     ) {
         if let keyPress = event.asKeyPressEventArgs {
-            content.keyPress(event: keyPress)
+            if !content.keyPress(event: keyPress) {
+                content.keyDown(event: event.asKeyEventArgs)
+            }
         } else {
             content.keyDown(event: event.asKeyEventArgs)
         }
